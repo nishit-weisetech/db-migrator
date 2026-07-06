@@ -1,0 +1,239 @@
+.dbmig-wrap .dbmig-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 6px;
+	padding: 16px 20px;
+	margin: 16px 0;
+	max-width: 1100px;
+}
+
+.dbmig-wrap .dbmig-card h2 {
+	margin-top: 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.dbmig-step {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: #2271b1;
+	color: #fff;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.dbmig-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.dbmig-inline-result {
+	font-weight: 600;
+}
+.dbmig-inline-result.ok { color: #00794d; }
+.dbmig-inline-result.err { color: #b32d2e; }
+
+.dbmig-badge {
+	display: inline-block;
+	padding: 2px 10px;
+	border-radius: 10px;
+	font-size: 12px;
+	font-weight: 600;
+}
+.dbmig-badge-ok { background: #edfaef; color: #00794d; border: 1px solid #00794d; }
+.dbmig-badge-warn { background: #fcf3e6; color: #8a6d00; border: 1px solid #d6a100; }
+
+.dbmig-grow { min-width: 320px; }
+
+.dbmig-map-table { margin-top: 8px; }
+.dbmig-map-table th { text-align: left; }
+.dbmig-map-table td { vertical-align: top; padding: 8px; }
+.dbmig-map-table select,
+.dbmig-map-table input[type="text"] { width: 100%; }
+
+.dbmig-target-cell select,
+.dbmig-target-cell input,
+.dbmig-source-col { width: 100%; }
+
+.dbmig-options-cell select { margin-bottom: 4px; }
+.dbmig-sub-label { display:block; font-size: 11px; color:#646970; }
+.dbmig-checkbox { display:block; font-size:12px; margin-top:4px; }
+
+.dbmig-partial-inline { margin-left: 14px; white-space: nowrap; }
+.dbmig-partial-inline input { margin-right: 4px; }
+
+.dbmig-joins { margin-top: 12px; }
+.dbmig-joins-title { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+
+.dbmig-join-row {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 8px 0;
+	padding: 10px 12px;
+	border: 1px solid #dcdcde;
+	border-left: 3px solid #2271b1;
+	border-radius: 4px;
+	background: #fff;
+}
+.dbmig-join-main {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.dbmig-join-main input { min-width: 160px; }
+.dbmig-join-conds { display: flex; flex-direction: column; gap: 6px; }
+.dbmig-join-cond {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	padding-left: 16px;
+}
+.dbmig-join-cond .dbmig-cond-val { min-width: 120px; }
+
+.dbmig-repeater-row {
+	border: 1px dashed #c3c4c7;
+	border-radius: 6px;
+	padding: 12px;
+	margin: 10px 0;
+	background: #fafafa;
+}
+.dbmig-repeater-head {
+	display: flex;
+	gap: 14px;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	margin-bottom: 10px;
+}
+.dbmig-repeater-head label {
+	display: flex;
+	flex-direction: column;
+	font-size: 12px;
+	font-weight: 600;
+	gap: 3px;
+}
+.dbmig-submap { background:#fff; }
+.dbmig-submap td { padding: 6px; }
+.dbmig-submap select { width: 100%; }
+
+.dbmig-remove { color: #b32d2e; text-decoration: none; }
+
+.dbmig-progress {
+	background: #e0e0e0;
+	border-radius: 6px;
+	height: 18px;
+	overflow: hidden;
+	max-width: 600px;
+	margin: 8px 0;
+}
+.dbmig-progress-bar {
+	background: #2271b1;
+	height: 100%;
+	width: 0;
+	transition: width .2s ease;
+}
+
+.dbmig-log {
+	background: #1d2327;
+	color: #c8d0d6;
+	padding: 12px;
+	border-radius: 6px;
+	max-height: 280px;
+	overflow: auto;
+	font-size: 12px;
+	white-space: pre-wrap;
+	max-width: 1000px;
+}
+
+.dbmig-sql {
+	width: 100%;
+	max-width: 1000px;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 12px;
+}
+
+.dbmig-batch { display: inline-flex; align-items: center; gap: 6px; }
+
+.dbmig-subhead {
+	margin-top: 22px;
+	padding-top: 14px;
+	border-top: 1px solid #e0e0e0;
+}
+
+.dbmig-section-row td {
+	background: #f0f3f7;
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: .04em;
+	color: #1d2327;
+}
+
+.dbmig-wpfield { font-weight: 600; }
+
+.dbmig-pill {
+	display: inline-block;
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	padding: 1px 6px;
+	border-radius: 8px;
+	margin-left: 6px;
+	vertical-align: middle;
+}
+.dbmig-pill.acf { background: #e7f0ff; color: #2257b8; }
+.dbmig-pill.rel { background: #fdeede; color: #9a5b00; }
+
+.dbmig-opt > select { width: 100%; margin-bottom: 4px; }
+.dbmig-opt .dbmig-rel-table { width: 100%; }
+
+/* ---- Guide ---- */
+.dbmig-guide .dbmig-card { max-width: 900px; }
+.dbmig-guide h2 { border-bottom: 1px solid #e2e4e7; padding-bottom: 8px; }
+.dbmig-guide-toc ul { columns: 2; margin: 6px 0 0; }
+.dbmig-guide-toc li { margin: 3px 0; }
+.dbmig-whatsnew { border-left: 4px solid #2271b1; background: #f6fbff; }
+.dbmig-whatsnew h2 { margin-top: 0; }
+.dbmig-guide-table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.dbmig-guide-table th {
+	text-align: left; vertical-align: top; white-space: nowrap;
+	width: 180px; padding: 8px 12px 8px 0; color: #1d2327;
+	border-bottom: 1px solid #f0f0f1;
+}
+.dbmig-guide-table td { vertical-align: top; padding: 8px 0; border-bottom: 1px solid #f0f0f1; }
+.dbmig-bullets, .dbmig-steps-list { margin: 6px 0 6px 20px; }
+.dbmig-bullets li { list-style: disc; margin: 5px 0; }
+.dbmig-steps-list li { list-style: decimal; margin: 5px 0; }
+.dbmig-example {
+	background: #1d2327; color: #c8d0d6; padding: 12px; border-radius: 6px;
+	font-size: 12px; overflow-x: auto; white-space: pre;
+}
+.dbmig-rule { background: #edf6ff; border-left: 4px solid #2271b1; padding: 10px 14px; margin: 8px 0; }
+.dbmig-note { background: #f6f7f7; border-left: 4px solid #8c8f94; padding: 10px 14px; margin: 8px 0; }
+.dbmig-warn { background: #fcf3e6; border-left: 4px solid #d6a100; padding: 10px 14px; margin: 8px 0; }
+.dbmig-hl { background: #fff8c5; padding: 1px 4px; border-radius: 3px; }
+.dbmig-guide code { background: #f0f0f1; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+/* ---- Select2 (searchable dropdowns) ---- */
+.dbmig-editor .select2-container { min-width: 140px; vertical-align: middle; }
+.dbmig-map-table .select2-container,
+.dbmig-submap .select2-container,
+.dbmig-target-cell .select2-container,
+.dbmig-extra-target .select2-container { width: 100% !important; min-width: 0; }
+.dbmig-editor .select2-container--default .select2-selection--single {
+	height: 30px; border-color: #8c8f94; border-radius: 4px;
+}
+.dbmig-editor .select2-selection--single .select2-selection__rendered { line-height: 28px; }
+.dbmig-editor .select2-selection--single .select2-selection__arrow { height: 28px; }
+.dbmig-join-row .select2-container { min-width: 170px; }
+.dbmig-repeater-head .select2-container { min-width: 150px; }
+.select2-dropdown { border-color: #8c8f94; }
+.select2-container--default .select2-results__option--highlighted[aria-selected] { background: #2271b1; }
