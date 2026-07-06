@@ -92,6 +92,7 @@ class DBMig_Admin {
 				'userFields' => $this->user_field_choices(),
 				'termFields' => $this->term_field_choices(),
 				'attachmentFields' => $this->attachment_field_choices(),
+				'commentFields' => $this->comment_field_choices(),
 				'postTypes'  => $this->get_post_types(),
 				'taxonomies' => $this->taxonomy_choices(),
 				'roles'      => $this->role_choices(),
@@ -151,6 +152,24 @@ class DBMig_Admin {
 			$out[ $slug ] = isset( $r['name'] ) ? $r['name'] : $slug;
 		}
 		return $out;
+	}
+
+	private function comment_field_choices() {
+		return array(
+			'comment_post_ID'      => 'Post (comment_post_ID) — use “Resolve → migrated post”',
+			'comment_content'      => 'Content (comment_content)',
+			'comment_author'       => 'Author name (comment_author)',
+			'comment_author_email' => 'Author email (comment_author_email)',
+			'comment_author_url'   => 'Author URL (comment_author_url)',
+			'comment_author_IP'    => 'Author IP (comment_author_IP)',
+			'comment_date'         => 'Date (comment_date)',
+			'comment_approved'     => 'Approved — 1 / 0 / spam (comment_approved)',
+			'comment_type'         => 'Type (comment_type)',
+			'comment_karma'        => 'Karma (comment_karma)',
+			'comment_agent'        => 'User agent (comment_agent)',
+			'comment_parent'       => 'Parent comment (comment_parent) — use “Resolve → migrated comment”',
+			'user_id'              => 'Registered user (user_id) — use “Resolve → migrated user”',
+		);
 	}
 
 	private function attachment_field_choices() {

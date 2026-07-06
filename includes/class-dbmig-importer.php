@@ -73,6 +73,8 @@ class DBMig_Importer {
 				$result = $this->import_user_row( $row );
 			} elseif ( 'term' === $type ) {
 				$result = $this->import_term_row( $row );
+			} elseif ( 'comment' === $type ) {
+				$result = $this->import_comment_row( $row );
 			} else {
 				$result = $this->import_row( $row );
 			}
@@ -419,6 +421,74 @@ class DBMig_Importer {
 		// ACF repeaters from child tables (term meta).
 		foreach ( $this->profile['repeaters'] as $rep ) {
 			$this->apply_repeater( 'term_' . $term_id, $row, $rep );
+		}
+
+		return $action;
+	}
+
+	/**
+	 * Import a single source row as a WordPress comment. Idempotent via the legacy
+	 * key stored on wp_comments. Writes comment fields + comment meta.
+	 *
+	 * @return string created|updated|skipped
+	 */
+	private function import_comment_row( $row ) {
+		$id_col    = $this->profile['source_id_column'];
+		$legacy_id = isset( $row[ $id_col ] ) ? $row[ $id_col ] : null;
+		if ( null === $legacy_id || '' === $legacy_id ) {
+			$this->log( 'Skipped comment row with empty source id.' );
+			return 'skipped';
+		}
+		$legacy_table = $this->profile['source_table'];
+		$existing_id  = DBMig_Schema::find_comment_by_legacy( $legacy_table, $legacy_id );
+
+		if ( ! empty( $this->profile['partial'] ) && ! $existing_id ) {
+			return 'skipped';
+		}
+
+		// Collect mapped comment fields (comment_post_ID / author / content / ...).
+		$commentarr = array();
+		foreach ( $this->profile['fields'] as $f ) {
+			if ( 'comment_field' === $f['target_kind'] ) {
+				$value = $this->resolve_source_value( $row, $f );
+				if ( null !== $value ) {
+					$commentarr[ $f['target'] ] = $value;
+				}
+			}
+		}
+
+		if ( $existing_id ) {
+			$commentarr['comment_ID'] = $existing_id;
+			$ok                       = wp_update_comment( wp_slash( $commentarr ) );
+			$comment_id               = ( false === $ok ) ? 0 : $existing_id;
+			$action                   = 'updated';
+		} else {
+			// wp_insert_comment does not sanitize; pass through as-is.
+			$comment_id = wp_insert_comment( wp_slash( $commentarr ) );
+			$action     = 'created';
+		}
+
+		if ( ! $comment_id ) {
+			$this->log( sprintf( 'Comment error on source id %s.', $legacy_id ) );
+			return 'skipped';
+		}
+
+		DBMig_Schema::stamp_comment_legacy( $comment_id, $legacy_table, $legacy_id );
+
+		// Comment meta + ACF comment fields.
+		foreach ( $this->profile['fields'] as $f ) {
+			if ( 'comment_meta' === $f['target_kind'] ) {
+				$value = $this->resolve_source_value( $row, $f );
+				if ( null !== $value ) {
+					update_comment_meta( $comment_id, $f['target'], $value );
+				}
+			} elseif ( 'acf' === $f['target_kind'] ) {
+				$value = $this->resolve_source_value( $row, $f );
+				if ( null !== $value ) {
+					$selector = $f['target'] ? $f['target'] : $f['acf_name'];
+					DBMig_ACF::update_value( $selector, $value, 'comment_' . $comment_id );
+				}
+			}
 		}
 
 		return $action;
@@ -848,8 +918,8 @@ class DBMig_Importer {
 		}
 		$transform = $f['transform'] ?? 'none';
 
-		// Resolve a legacy id to the migrated WP post / user / term id.
-		if ( in_array( $transform, array( 'resolve_post', 'resolve_user', 'resolve_term' ), true ) ) {
+		// Resolve a legacy id to the migrated WP post / user / term / comment id.
+		if ( in_array( $transform, array( 'resolve_post', 'resolve_user', 'resolve_term', 'resolve_comment' ), true ) ) {
 			if ( null === $value || '' === $value ) {
 				return null;
 			}
@@ -858,6 +928,8 @@ class DBMig_Importer {
 				$id = DBMig_Schema::find_user_by_legacy( $rt, $value );
 			} elseif ( 'resolve_term' === $transform ) {
 				$id = DBMig_Schema::find_term_by_legacy( $rt, $value );
+			} elseif ( 'resolve_comment' === $transform ) {
+				$id = DBMig_Schema::find_comment_by_legacy( $rt, $value );
 			} else {
 				$id = DBMig_Schema::find_post_by_legacy( $rt, $value );
 			}

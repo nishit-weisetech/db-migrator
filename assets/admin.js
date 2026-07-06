@@ -111,6 +111,7 @@
 		userFields: {},
 		termFields: {},
 		attachmentFields: {},
+		commentFields: {},
 		pendingFixed: {},   // kind|target -> {source,transform,rel_table} to restore after build
 
 		init: function () {
@@ -127,6 +128,7 @@
 			this.userFields = DBMig.userFields || {};
 			this.termFields = DBMig.termFields || {};
 			this.attachmentFields = DBMig.attachmentFields || {};
+			this.commentFields = DBMig.commentFields || {};
 
 			this.fillRoles();
 			this.fillTaxonomies();
@@ -317,6 +319,7 @@
 			$( '.dbmig-when-user' ).toggle( t === 'user' );
 			$( '.dbmig-when-term' ).toggle( t === 'term' );
 			$( '.dbmig-when-attachment' ).toggle( t === 'attachment' );
+			$( '.dbmig-when-comment' ).toggle( t === 'comment' );
 			this.loadAcf();          // reloads with proper context, then rebuilds list
 			this.refreshExtraKinds();
 		},
@@ -354,6 +357,15 @@
 		loadAcf: function () {
 			var self = this;
 			var t = this.migrationType();
+			// Comments have no auto-listed ACF fields (manual ACF still works via
+			// Additional mappings). Skip the fetch and rebuild with none.
+			if ( t === 'comment' ) {
+				self.acfFields = [];
+				self.acfActive = DBMig.acfActive;
+				$( '#dbmig-acf-status' ).text( '' );
+				self.rebuildFieldList();
+				return $.Deferred().resolve().promise();
+			}
 			var data;
 			if ( t === 'user' ) {
 				data = { context: 'user' };
@@ -552,7 +564,8 @@
 				'<option value="serialize_decode">Unserialize</option>' +
 				'<option value="resolve_post">🔗 Resolve → migrated post ID</option>' +
 				'<option value="resolve_user">🔗 Resolve → migrated user ID</option>' +
-				'<option value="resolve_term">🔗 Resolve → migrated term ID</option>';
+				'<option value="resolve_term">🔗 Resolve → migrated term ID</option>' +
+				'<option value="resolve_comment">🔗 Resolve → migrated comment ID</option>';
 		},
 
 		/**
@@ -584,9 +597,9 @@
 
 			var $tbody = $( '#dbmig-fields-list' ).empty();
 			var t = this.migrationType();
-			var coreFields = ( t === 'user' ) ? this.userFields : ( t === 'term' ) ? this.termFields : ( t === 'attachment' ) ? this.attachmentFields : this.postFields;
-			var coreKind = ( t === 'user' ) ? 'user_field' : ( t === 'term' ) ? 'term_field' : 'post_field';
-			var coreLabel = ( t === 'user' ) ? 'User fields' : ( t === 'term' ) ? 'Term fields' : ( t === 'attachment' ) ? 'Attachment fields' : 'Post fields';
+			var coreFields = ( t === 'user' ) ? this.userFields : ( t === 'term' ) ? this.termFields : ( t === 'attachment' ) ? this.attachmentFields : ( t === 'comment' ) ? this.commentFields : this.postFields;
+			var coreKind = ( t === 'user' ) ? 'user_field' : ( t === 'term' ) ? 'term_field' : ( t === 'comment' ) ? 'comment_field' : 'post_field';
+			var coreLabel = ( t === 'user' ) ? 'User fields' : ( t === 'term' ) ? 'Term fields' : ( t === 'attachment' ) ? 'Attachment fields' : ( t === 'comment' ) ? 'Comment fields' : 'Post fields';
 			var self = this;
 
 			$tbody.append( this.sectionRow( coreLabel ) );
@@ -713,6 +726,9 @@
 			}
 			if ( t === 'term' ) {
 				return '<option value="term_meta">Term meta</option>' + acf;
+			}
+			if ( t === 'comment' ) {
+				return '<option value="comment_meta">Comment meta</option>' + acf;
 			}
 			return '<option value="post_meta">Post meta</option>' +
 				'<option value="taxonomy">Taxonomy</option>' + acf + media;
@@ -966,6 +982,7 @@
 			$( '.dbmig-when-user' ).toggle( mt === 'user' );
 			$( '.dbmig-when-term' ).toggle( mt === 'term' );
 			$( '.dbmig-when-attachment' ).toggle( mt === 'attachment' );
+			$( '.dbmig-when-comment' ).toggle( mt === 'comment' );
 
 			// Prepare fixed-row values (restored in rebuildFieldList) and collect the
 			// extra rows (custom meta / taxonomy). Extra rows are built AFTER the
@@ -974,7 +991,7 @@
 			var pendingExtra = [];
 			var pendingAcf = [];
 			( p.fields || [] ).forEach( function ( f ) {
-				if ( f.target_kind === 'post_field' || f.target_kind === 'user_field' || f.target_kind === 'term_field' ) {
+				if ( f.target_kind === 'post_field' || f.target_kind === 'user_field' || f.target_kind === 'term_field' || f.target_kind === 'comment_field' ) {
 					self.pendingFixed[ f.target_kind + '|' + f.target ] = {
 						source: f.source,
 						static_value: f.static_value || '',

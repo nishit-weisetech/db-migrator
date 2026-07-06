@@ -23,7 +23,7 @@ class DBMig_Schema {
 	public static function ensure_columns() {
 		global $wpdb;
 
-		foreach ( array( $wpdb->posts, $wpdb->users, $wpdb->terms ) as $table ) {
+		foreach ( array( $wpdb->posts, $wpdb->users, $wpdb->terms, $wpdb->comments ) as $table ) {
 			$res = self::add_legacy_columns( $table );
 			if ( is_wp_error( $res ) ) {
 				return $res;
@@ -97,6 +97,11 @@ class DBMig_Schema {
 		return self::column_exists( $wpdb->terms, 'legacy_id' );
 	}
 
+	public static function comments_columns_ready() {
+		global $wpdb;
+		return self::column_exists( $wpdb->comments, 'legacy_id' );
+	}
+
 	public static function column_exists( $table, $column ) {
 		global $wpdb;
 		$found = $wpdb->get_var(
@@ -145,6 +150,10 @@ class DBMig_Schema {
 		return self::find_by_legacy( 'terms', 'term_id', $legacy_table, $legacy_id );
 	}
 
+	public static function find_comment_by_legacy( $legacy_table, $legacy_id ) {
+		return self::find_by_legacy( 'comments', 'comment_ID', $legacy_table, $legacy_id );
+	}
+
 	private static function find_by_legacy( $which, $id_col, $legacy_table, $legacy_id ) {
 		global $wpdb;
 		if ( '' === (string) $legacy_id || null === $legacy_id ) {
@@ -178,5 +187,10 @@ class DBMig_Schema {
 	public static function stamp_term_legacy( $term_id, $legacy_table, $legacy_id ) {
 		global $wpdb;
 		$wpdb->update( $wpdb->terms, array( 'legacy_table_name' => $legacy_table, 'legacy_id' => $legacy_id ), array( 'term_id' => $term_id ), array( '%s', '%d' ), array( '%d' ) );
+	}
+
+	public static function stamp_comment_legacy( $comment_id, $legacy_table, $legacy_id ) {
+		global $wpdb;
+		$wpdb->update( $wpdb->comments, array( 'legacy_table_name' => $legacy_table, 'legacy_id' => $legacy_id ), array( 'comment_ID' => $comment_id ), array( '%s', '%d' ), array( '%d' ) );
 	}
 }

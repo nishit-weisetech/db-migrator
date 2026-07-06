@@ -60,6 +60,7 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 						<option value="user"><?php esc_html_e( 'Users', 'db-migrator' ); ?></option>
 						<option value="term"><?php esc_html_e( 'Taxonomy terms', 'db-migrator' ); ?></option>
 						<option value="attachment"><?php esc_html_e( 'Media attachments', 'db-migrator' ); ?></option>
+						<option value="comment"><?php esc_html_e( 'Comments', 'db-migrator' ); ?></option>
 					</select>
 					<p class="description"><?php esc_html_e( 'Users → migrate authors / accounts. Taxonomy terms → migrate a legacy table into a taxonomy. Media attachments → create attachment posts in the Media Library (you place the image files into wp-content/uploads yourself, then regenerate sizes).', 'db-migrator' ); ?></p>
 				</td>
@@ -97,6 +98,15 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 				<td>
 					<select id="dbmig-taxonomy"></select>
 					<p class="description"><?php esc_html_e( 'Which taxonomy the migrated terms are created in. Choosing one loads its ACF term fields below.', 'db-migrator' ); ?></p>
+				</td>
+			</tr>
+			<tr class="dbmig-when-comment" style="display:none">
+				<th scope="row"><?php esc_html_e( 'Target', 'db-migrator' ); ?></th>
+				<td>
+					<p><strong><?php esc_html_e( 'WordPress comments (wp_comments).', 'db-migrator' ); ?></strong></p>
+					<p class="description">
+						<?php esc_html_e( 'Map the legacy post-id column to Post (comment_post_ID) with the “Resolve → migrated post” transform (pick the legacy posts table) so each comment attaches to the right migrated post. Migrate the posts first. For threaded replies, map the parent-comment id with “Resolve → migrated comment”. Comment counts are recalculated automatically.', 'db-migrator' ); ?>
+					</p>
 				</td>
 			</tr>
 			<tr class="dbmig-when-attachment" style="display:none">

@@ -40,6 +40,9 @@ class DBMig_SQL_Builder {
 		if ( 'term' === $type ) {
 			return $this->build_terms();
 		}
+		if ( 'comment' === $type ) {
+			return $this->build_comments();
+		}
 		return $this->build_posts();
 	}
 
@@ -826,6 +829,168 @@ class DBMig_SQL_Builder {
 	}
 
 	/* ===================================================================== *
+	 *  COMMENTS
+	 * ===================================================================== */
+
+	private function build_comments() {
+		global $wpdb;
+
+		$partial = ! empty( $this->profile['partial'] );
+		list( , $base ) = $this->parse_table( $this->profile['source_table'] );
+		$id_col = $this->id( $this->profile['source_id_column'] );
+		$ltn    = esc_sql( $this->profile['source_table'] );
+		$key    = "`{$base}`.`{$id_col}`";
+		$from   = $this->source_from();
+
+		$lines = $this->header( 'comment', $wpdb->comments );
+		if ( $partial ) {
+			$lines[] = '-- PARTIAL UPDATE: only already-migrated comments are touched (none created).';
+			$lines[] = '';
+		}
+
+		// Mapped comment_field expressions + the meta fields.
+		$fields   = array();
+		$meta_map = array();
+		foreach ( $this->profile['fields'] as $f ) {
+			if ( empty( $f['source'] ) ) {
+				continue;
+			}
+			if ( 'comment_field' === $f['target_kind'] ) {
+				// comment_parent resolved to a migrated comment is self-referential,
+				// so it can't be a sub-query inside the wp_comments write — it's
+				// linked separately (build_comment_parent_links) after all inserts.
+				if ( 'comment_parent' === $f['target'] && 'resolve_comment' === ( $f['transform'] ?? '' ) ) {
+					continue;
+				}
+				$fields[ $f['target'] ] = $this->field_expr( $f, $base );
+			} elseif ( 'comment_meta' === $f['target_kind'] ) {
+				$meta_map[] = array( 'meta_key' => $f['target'], 'expr' => $this->field_expr( $f, $base ), 'field_key' => '' );
+			} elseif ( 'acf' === $f['target_kind'] ) {
+				$meta_map[] = $this->acf_meta_descriptor( $f, $base );
+			}
+		}
+
+		/* ---- 1. UPDATE existing comments (mapped fields only) ---- */
+		if ( ! $partial || ! empty( $fields ) ) {
+			$set = array();
+			foreach ( $fields as $col => $expr ) {
+				$set[] = "c.`{$col}` = COALESCE({$expr}, c.`{$col}`)";
+			}
+			if ( $set ) {
+				$lines[] = '-- 1) Update comments that were already migrated.';
+				$lines[] = "UPDATE `{$wpdb->comments}` c";
+				$lines[] = "JOIN {$from} ON c.legacy_table_name = '{$ltn}' AND c.legacy_id = {$key}";
+				$lines[] = 'SET ' . implode( ",\n    ", $set ) . ';';
+				$lines[] = '';
+			}
+		}
+
+		/* ---- 2. INSERT missing comments (skipped in partial mode) ---- */
+		if ( ! $partial ) {
+			$cols = array(
+				'comment_post_ID'      => $this->expr_or( $fields, 'comment_post_ID', '0' ),
+				'comment_author'       => $this->expr_or( $fields, 'comment_author', "''" ),
+				'comment_author_email' => $this->expr_or( $fields, 'comment_author_email', "''" ),
+				'comment_author_url'   => $this->expr_or( $fields, 'comment_author_url', "''" ),
+				'comment_author_IP'    => $this->expr_or( $fields, 'comment_author_IP', "''" ),
+				'comment_date'         => $this->expr_or( $fields, 'comment_date', 'NOW()' ),
+				'comment_date_gmt'     => $this->expr_or( $fields, 'comment_date', 'NOW()' ),
+				'comment_content'      => $this->expr_or( $fields, 'comment_content', "''" ),
+				'comment_karma'        => $this->expr_or( $fields, 'comment_karma', '0' ),
+				'comment_approved'     => $this->expr_or( $fields, 'comment_approved', "'1'" ),
+				'comment_agent'        => $this->expr_or( $fields, 'comment_agent', "''" ),
+				'comment_type'         => $this->expr_or( $fields, 'comment_type', "'comment'" ),
+				'comment_parent'       => $this->expr_or( $fields, 'comment_parent', '0' ),
+				'user_id'              => $this->expr_or( $fields, 'user_id', '0' ),
+				'legacy_id'            => $key,
+				'legacy_table_name'    => "'{$ltn}'",
+			);
+			$lines[] = '-- 2) Insert comments that have not been migrated yet.';
+			$lines[] = "INSERT INTO `{$wpdb->comments}`\n  (`" . implode( '`, `', array_keys( $cols ) ) . '`)';
+			$lines[] = 'SELECT ' . implode( ",\n    ", array_values( $cols ) );
+			$lines[] = "FROM {$from}";
+			$lines[] = "WHERE NOT EXISTS (SELECT 1 FROM `{$wpdb->comments}` c2 WHERE c2.legacy_table_name = '{$ltn}' AND c2.legacy_id = {$key});";
+			$lines[] = '';
+		}
+
+		/* ---- 3. Comment meta / ACF (delete + insert) ---- */
+		if ( $meta_map ) {
+			$lines[] = '-- 3) Comment meta / ACF values (delete-then-insert).';
+			foreach ( $meta_map as $mf ) {
+				$lines = array_merge( $lines, $this->comment_meta_block( $mf, $key, $ltn, $from ) );
+			}
+		}
+
+		/* ---- 4. Resolve threaded parents (set-based self-join, after inserts) ---- */
+		$lines = array_merge( $lines, $this->build_comment_parent_links( $base, $ltn, $from ) );
+
+		/* ---- 5. Recount comment_count on the affected posts ---- */
+		$lines[] = '-- 5) Recount comment_count on posts that received comments.';
+		$lines[] = "UPDATE `{$wpdb->posts}` p SET p.comment_count = (SELECT COUNT(*) FROM `{$wpdb->comments}` c WHERE c.comment_post_ID = p.ID AND c.comment_approved = '1')";
+		$lines[] = "WHERE p.ID IN (SELECT DISTINCT comment_post_ID FROM `{$wpdb->comments}` WHERE legacy_table_name = '{$ltn}' AND comment_post_ID > 0);";
+
+		$lines[] = '-- Note: ACF repeaters and multi-value relationships still run via "Run import".';
+		$lines = array_merge( $lines, $this->footer() );
+		return implode( "\n", $lines );
+	}
+
+	/**
+	 * Set-based resolution of comment_parent → the migrated parent comment, run
+	 * after all comments exist. Uses a self-JOIN on wp_comments (allowed in a
+	 * multi-table UPDATE, unlike a sub-query on the update target).
+	 */
+	private function build_comment_parent_links( $base, $ltn, $from ) {
+		global $wpdb;
+		$key   = "`{$base}`.`" . $this->id( $this->profile['source_id_column'] ) . '`';
+		$lines = array();
+		foreach ( $this->profile['fields'] as $f ) {
+			if ( 'comment_field' !== $f['target_kind'] || 'comment_parent' !== $f['target'] ) {
+				continue;
+			}
+			if ( 'resolve_comment' !== ( $f['transform'] ?? '' ) || empty( $f['rel_table'] ) || empty( $f['source'] ) ) {
+				continue;
+			}
+			$rel = esc_sql( $f['rel_table'] );
+			$src = $this->qualify_expr( $f['source'], $base ); // parent legacy id on the source row
+			$lines[] = '';
+			$lines[] = "-- ===== comment_parent <- {$f['source']}  (resolved to migrated comments) =====";
+			$lines[] = "UPDATE `{$wpdb->comments}` c";
+			$lines[] = "JOIN {$from} ON c.legacy_table_name = '{$ltn}' AND c.legacy_id = {$key}";
+			$lines[] = "JOIN `{$wpdb->comments}` cp ON cp.legacy_table_name = '{$rel}' AND cp.legacy_id = {$src}";
+			$lines[] = "SET c.comment_parent = cp.comment_ID";
+			$lines[] = "WHERE {$src} IS NOT NULL AND {$src} <> 0;";
+		}
+		return $lines;
+	}
+
+	private function comment_meta_block( $mf, $key, $ltn, $from ) {
+		global $wpdb;
+		$meta_key   = esc_sql( $mf['meta_key'] );
+		$expr       = $mf['expr'];
+		$comment_jn = "JOIN `{$wpdb->comments}` c ON c.legacy_table_name = '{$ltn}' AND c.legacy_id = {$key}";
+
+		$out   = array();
+		$out[] = "-- comment meta: {$meta_key}";
+		$out[] = "DELETE cm FROM `{$wpdb->commentmeta}` cm";
+		$out[] = "  JOIN `{$wpdb->comments}` c ON c.comment_ID = cm.comment_id AND c.legacy_table_name = '{$ltn}'";
+		$out[] = "  WHERE cm.meta_key = '{$meta_key}';";
+		$out[] = "INSERT INTO `{$wpdb->commentmeta}` (comment_id, meta_key, meta_value)";
+		$out[] = "SELECT c.comment_ID, '{$meta_key}', {$expr}";
+		$out[] = "FROM {$from}";
+		$out[] = $comment_jn;
+		$out[] = "WHERE {$expr} IS NOT NULL;";
+
+		if ( ! empty( $mf['field_key'] ) ) {
+			$fk_key = '_' . $meta_key;
+			$fk_val = esc_sql( $mf['field_key'] );
+			$out[]  = "DELETE cm FROM `{$wpdb->commentmeta}` cm JOIN `{$wpdb->comments}` c ON c.comment_ID = cm.comment_id AND c.legacy_table_name = '{$ltn}' WHERE cm.meta_key = '{$fk_key}';";
+			$out[]  = "INSERT INTO `{$wpdb->commentmeta}` (comment_id, meta_key, meta_value) SELECT c.comment_ID, '{$fk_key}', '{$fk_val}' FROM {$from} {$comment_jn};";
+		}
+		$out[] = '';
+		return $out;
+	}
+
+	/* ===================================================================== *
 	 *  Shared helpers
 	 * ===================================================================== */
 
@@ -1201,7 +1366,7 @@ class DBMig_SQL_Builder {
 
 		// Resolve a legacy id to the migrated WP post / user / term id (indexed).
 		$transform = $f['transform'] ?? 'none';
-		if ( in_array( $transform, array( 'resolve_post', 'resolve_user', 'resolve_term' ), true ) ) {
+		if ( in_array( $transform, array( 'resolve_post', 'resolve_user', 'resolve_term', 'resolve_comment' ), true ) ) {
 			$col = $this->qualify_expr( $f['source'], $base );
 			$rt  = esc_sql( $f['rel_table'] ?? '' );
 			if ( 'resolve_user' === $transform ) {
@@ -1209,6 +1374,9 @@ class DBMig_SQL_Builder {
 			}
 			if ( 'resolve_term' === $transform ) {
 				return "(SELECT rtm.term_id FROM `{$wpdb->terms}` rtm WHERE rtm.legacy_table_name = '{$rt}' AND rtm.legacy_id = {$col} LIMIT 1)";
+			}
+			if ( 'resolve_comment' === $transform ) {
+				return "(SELECT rc.comment_ID FROM `{$wpdb->comments}` rc WHERE rc.legacy_table_name = '{$rt}' AND rc.legacy_id = {$col} LIMIT 1)";
 			}
 			return "(SELECT rp.ID FROM `{$wpdb->posts}` rp WHERE rp.legacy_table_name = '{$rt}' AND rp.legacy_id = {$col} LIMIT 1)";
 		}

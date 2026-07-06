@@ -194,6 +194,9 @@ class DBMig_ACF {
 		} elseif ( is_string( $object_id ) && 0 === strpos( $object_id, 'term_' ) ) {
 			$term_id = (int) substr( $object_id, 5 );
 			update_term_meta( $term_id, $selector, $value );
+		} elseif ( is_string( $object_id ) && 0 === strpos( $object_id, 'comment_' ) ) {
+			$comment_id = (int) substr( $object_id, 8 );
+			update_comment_meta( $comment_id, $selector, $value );
 		} else {
 			update_post_meta( (int) $object_id, $selector, $value );
 		}

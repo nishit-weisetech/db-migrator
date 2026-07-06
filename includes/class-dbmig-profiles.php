@@ -137,7 +137,7 @@ class DBMig_Profiles {
 		$profile = array(
 			'id'               => isset( $raw['id'] ) ? sanitize_text_field( $raw['id'] ) : '',
 			'name'             => isset( $raw['name'] ) ? sanitize_text_field( $raw['name'] ) : '',
-			'migration_type'   => in_array( $raw['migration_type'] ?? '', array( 'user', 'term', 'attachment' ), true ) ? $raw['migration_type'] : 'post',
+			'migration_type'   => in_array( $raw['migration_type'] ?? '', array( 'user', 'term', 'attachment', 'comment' ), true ) ? $raw['migration_type'] : 'post',
 			'post_type'        => isset( $raw['post_type'] ) ? sanitize_key( $raw['post_type'] ) : 'post',
 			'taxonomy'         => isset( $raw['taxonomy'] ) ? sanitize_key( $raw['taxonomy'] ) : '',
 			'role'             => isset( $raw['role'] ) ? sanitize_key( $raw['role'] ) : 'subscriber',

@@ -21,8 +21,9 @@ $new_url      = admin_url( 'admin.php?page=' . DBMig_Admin::MENU_SLUG . '&action
 			<li><a href="#g-author">7. Mapping the author (post_author)</a></li>
 			<li><a href="#g-acf">8. ACF fields, relationships &amp; repeaters</a></li>
 			<li><a href="#g-media">9. Media / images</a></li>
-			<li><a href="#g-run">10. Running a migration (3 ways)</a></li>
-			<li><a href="#g-tips">11. Key rules &amp; gotchas</a></li>
+			<li><a href="#g-comment">10. Migrating comments</a></li>
+			<li><a href="#g-run">11. Running a migration (3 ways)</a></li>
+			<li><a href="#g-tips">12. Key rules &amp; gotchas</a></li>
 		</ul>
 	</div>
 
@@ -38,7 +39,8 @@ $new_url      = admin_url( 'admin.php?page=' . DBMig_Admin::MENU_SLUG . '&action
 			<li><strong>Partial update.</strong> Re-run to fill in just one field you added later, updating only already-migrated rows and creating nothing. (<a href="#g-run">§10</a>)</li>
 			<li><strong>Users never get invented data.</strong> Skipped user fields keep WordPress’s defaults — no placeholder e-mails. (<a href="#g-user">§4</a>)</li>
 			<li><strong>Media-attachment migration type.</strong> Import a legacy media table as Media Library <code>attachment</code> posts (title, file URL, <code>_wp_attached_file</code>; MIME type auto-detected from the file URL); place the files manually and regenerate sizes. (<a href="#g-media">§9</a>)</li>
-			<li><strong>Export / import migrations.</strong> Build and test your migration profiles locally, then carry them to the production server. (<a href="#g-run">§10</a>)</li>
+			<li><strong>Export / import migrations.</strong> Build and test your migration profiles locally, then carry them to the production server. (<a href="#g-run">§11</a>)</li>
+			<li><strong>Comment migration type.</strong> Import a legacy comments table into <code>wp_comments</code> — attach to migrated posts, resolve threaded replies, recount automatically. (<a href="#g-comment">§10</a>)</li>
 		</ul>
 	</div>
 
@@ -46,7 +48,7 @@ $new_url      = admin_url( 'admin.php?page=' . DBMig_Admin::MENU_SLUG . '&action
 	<div class="dbmig-card" id="g-how">
 		<h2>1. How it works (read this first)</h2>
 		<p>You connect a <strong>legacy (source) MySQL database</strong> and describe how its tables map onto WordPress. The plugin only <em>reads</em> the source DB; it writes to WordPress.</p>
-		<p>Each migration targets one of four things (Step 1 → <strong>“Migrate into”</strong>): <strong>Posts</strong> (a post type, §3), <strong>Users</strong> (§4), <strong>Taxonomy terms</strong> (§6), or <strong>Media attachments</strong> (§9).</p>
+		<p>Each migration targets one of five things (Step 1 → <strong>“Migrate into”</strong>): <strong>Posts</strong> (a post type, §3), <strong>Users</strong> (§4), <strong>Taxonomy terms</strong> (§6), <strong>Media attachments</strong> (§9), or <strong>Comments</strong> (§10).</p>
 		<ul class="dbmig-bullets">
 			<li><strong>Legacy link.</strong> Two indexed columns — <code>legacy_id</code> and <code>legacy_table_name</code> — are added on activation to <code>wp_posts</code>, <code>wp_users</code> and <code>wp_terms</code>. Every migrated post, author and term remembers which source row it came from, so lookups and re-runs are fast and idempotent. (Older user links stored in usermeta are copied into the column automatically.)</li>
 			<li><strong>Idempotent.</strong> Because of that link, running a migration again <em>updates</em> existing rows instead of creating duplicates. Safe to re-run.</li>
@@ -227,8 +229,23 @@ WHERE image IS NOT NULL
 	</div>
 
 	<!-- 10 -->
+	<div class="dbmig-card" id="g-comment">
+		<h2>10. Migrating comments</h2>
+		<p>Set <strong>“Migrate into” = Comments</strong> to bring a legacy comments table into WordPress (<code>wp_comments</code>). Same idempotent legacy-id/table tracking as everything else — re-runs update in place. <strong>Migrate the posts first</strong> so each comment can attach to one.</p>
+		<table class="dbmig-guide-table">
+			<tr><th>Attach to a post</th><td>Map the legacy post-id column to <strong>Post (comment_post_ID)</strong> and set its transform to <strong>“Resolve → migrated post”</strong>, choosing the legacy posts table. Each comment then lands on the right migrated post.</td></tr>
+			<tr><th>Content &amp; author</th><td><code>comment_content</code>, <code>comment_author</code>, <code>comment_author_email</code>, <code>comment_author_url</code>, <code>comment_author_IP</code>, <code>comment_date</code>.</td></tr>
+			<tr><th>Registered commenter</th><td>If the commenter was a logged-in user, map the legacy user id to <strong>Registered user (user_id)</strong> with <strong>“Resolve → migrated user”</strong> (migrate the users first).</td></tr>
+			<tr><th>Threaded replies</th><td>Map the legacy parent-comment id to <strong>Parent comment (comment_parent)</strong> with <strong>“Resolve → migrated comment”</strong> (referenced table = the same comments table). Parents are linked in a second pass after all comments exist, so ordering doesn’t matter.</td></tr>
+			<tr><th>Approved / type</th><td><code>comment_approved</code> (defaults to <code>1</code> = approved; map a column for spam/pending), <code>comment_type</code>.</td></tr>
+			<tr><th>Extra</th><td>Add <strong>Comment meta</strong> rows under <em>Additional mappings</em> for anything else.</td></tr>
+		</table>
+		<p>After running, each post’s <code>comment_count</code> is recalculated automatically from its approved comments.</p>
+	</div>
+
+	<!-- 11 -->
 	<div class="dbmig-card" id="g-run">
-		<h2>10. Running a migration (3 ways)</h2>
+		<h2>11. Running a migration (3 ways)</h2>
 		<table class="dbmig-guide-table">
 			<tr><th>Run SQL (fast)</th><td>Executes the generated create-or-update SQL directly from the browser — posts, meta, taxonomies and author linking — with a progress bar. Best for large tables. <em>Recommended.</em></td></tr>
 			<tr><th>Run import (PHP)</th><td>Row-by-row PHP. Slower, but also handles <strong>ACF repeaters</strong> and multi-value ACF relationships (which bulk SQL can't build).</td></tr>
@@ -246,9 +263,9 @@ WHERE image IS NOT NULL
 		<p><strong>Partial update</strong> (checkbox in Step 1, next to the migration name): tick it to <em>only</em> update rows that were already migrated, writing just the fields you mapped — no new rows are created, and unmapped columns are left untouched. Use it when you finish a migration and later want to fill in one extra field: map only that field, tick Partial update, and re-run. Leave it unticked for the initial full migration. Works on all three run modes and for posts, users and terms.</p>
 	</div>
 
-	<!-- 11 -->
+	<!-- 12 -->
 	<div class="dbmig-card" id="g-tips">
-		<h2>11. Key rules &amp; gotchas</h2>
+		<h2>12. Key rules &amp; gotchas</h2>
 		<ul class="dbmig-bullets">
 			<li><strong>Blank = skip.</strong> Any field row with no source column is left untouched.</li>
 			<li><strong>Re-runs are safe.</strong> Everything matches by the legacy link, so re-running updates instead of duplicating.</li>
