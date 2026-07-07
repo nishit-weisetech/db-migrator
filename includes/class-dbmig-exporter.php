@@ -17,7 +17,7 @@ class DBMig_Exporter {
 
 	// Bump when the SQL generation logic changes so previously generated files
 	// are treated as stale and a fresh (corrected) file is produced.
-	const GEN_VERSION = 25;
+	const GEN_VERSION = 28;
 
 	public static function dir_path() {
 		return trailingslashit( DBMIG_DIR . self::SUBDIR );

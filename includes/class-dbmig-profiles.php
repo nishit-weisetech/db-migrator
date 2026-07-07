@@ -235,6 +235,20 @@ class DBMig_Profiles {
 						);
 					}
 				}
+				$rep_joins = array();
+				if ( ! empty( $r['joins'] ) && is_array( $r['joins'] ) ) {
+					foreach ( $r['joins'] as $rj ) {
+						if ( empty( $rj['table'] ) || empty( $rj['left_col'] ) || empty( $rj['right_col'] ) ) {
+							continue;
+						}
+						$rep_joins[] = array(
+							'table'     => sanitize_text_field( $rj['table'] ),
+							'type'      => in_array( $rj['type'] ?? 'LEFT', array( 'LEFT', 'INNER' ), true ) ? $rj['type'] : 'LEFT',
+							'left_col'  => sanitize_text_field( $rj['left_col'] ),
+							'right_col' => sanitize_text_field( $rj['right_col'] ),
+						);
+					}
+				}
 				$profile['repeaters'][] = array(
 					'acf_field'   => sanitize_text_field( $r['acf_field'] ),
 					'acf_name'    => sanitize_text_field( $r['acf_name'] ?? '' ),
@@ -242,6 +256,7 @@ class DBMig_Profiles {
 					'child_fk'    => sanitize_text_field( $r['child_fk'] ?? '' ),
 					'parent_col'  => sanitize_text_field( $r['parent_col'] ?? '' ),
 					'order_by'    => sanitize_text_field( $r['order_by'] ?? '' ),
+					'joins'       => $rep_joins,
 					'sub_map'     => $sub_map,
 				);
 			}

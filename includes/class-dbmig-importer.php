@@ -832,35 +832,91 @@ class DBMig_Importer {
 	 * @param int|string $object_id Post ID, or "user_{ID}" for a user repeater.
 	 */
 	private function apply_repeater( $object_id, $row, $rep ) {
-		$parent_col = $rep['parent_col'] ? $rep['parent_col'] : $this->profile['source_id_column'];
-		$parent_val = isset( $row[ $parent_col ] ) ? $row[ $parent_col ] : null;
-		if ( null === $parent_val ) {
-			// parent_col might be qualified (table.col); try the bare alias used in SELECT.
-			$short = $this->strip_qualifier( $parent_col );
-			$parent_val = isset( $row[ $short ] ) ? $row[ $short ] : null;
-		}
-		if ( null === $parent_val ) {
-			return;
-		}
-
 		$child_table = $this->ext->safe_identifier( $rep['child_table'] );
 		$child_fk    = $this->ext->safe_identifier( $rep['child_fk'] );
 		if ( ! $child_table || ! $child_fk ) {
 			$this->log( 'Repeater has an invalid child table / fk.' );
 			return;
 		}
+		$base_tbl = $this->ext->safe_identifier( $this->profile['source_table'] );
+		$vias     = ( ! empty( $rep['joins'] ) && is_array( $rep['joins'] ) ) ? $rep['joins'] : array();
 
-		$sql = sprintf(
-			"SELECT * FROM `%s` WHERE `%s` = '%s'",
-			$child_table,
-			$child_fk,
-			esc_sql( $parent_val )
-		);
+		$order = '';
 		if ( ! empty( $rep['order_by'] ) ) {
-			$ob = $this->ext->safe_identifier( $rep['order_by'] );
+			$ob = $this->ext->safe_identifier( $this->strip_qualifier( $rep['order_by'] ) );
 			if ( $ob ) {
-				$sql .= " ORDER BY `{$ob}` ASC";
+				$order = " ORDER BY `{$child_table}`.`{$ob}` ASC";
 			}
+		}
+
+		// Resolve "table.col" / bare into [table, col] (bare belongs to the base).
+		$qual = function ( $ref ) use ( $base_tbl ) {
+			if ( false !== strpos( $ref, '.' ) ) {
+				list( $t, $c ) = explode( '.', $ref, 2 );
+				return array( $this->ext->safe_identifier( $t ), $this->ext->safe_identifier( $c ) );
+			}
+			return array( $base_tbl, $this->ext->safe_identifier( $ref ) );
+		};
+
+		if ( empty( $vias ) ) {
+			// Simple direct case: child.child_fk = <parent source value>.
+			$parent_col = $rep['parent_col'] ? $this->strip_qualifier( $rep['parent_col'] ) : $this->profile['source_id_column'];
+			$parent_val = array_key_exists( $parent_col, $row ) ? $row[ $parent_col ] : null;
+			if ( null === $parent_val ) {
+				return;
+			}
+			$sql = "SELECT * FROM `{$child_table}` WHERE `{$child_fk}` = '" . esc_sql( $parent_val ) . "'" . $order;
+		} else {
+			// Multi-hop: cross-join the intermediate tables; base-table references
+			// are pinned to this parent row's values (implicit inner join via WHERE).
+			$tables = array();
+			$where  = array();
+			$pcol   = $rep['parent_col'] ? $rep['parent_col'] : $this->profile['source_id_column'];
+			if ( false !== strpos( $pcol, '.' ) ) {
+				list( $pt, $pc ) = $qual( $pcol );
+				$tables[ $pt ]   = true;
+				$where[]         = "`{$child_table}`.`{$child_fk}` = `{$pt}`.`{$pc}`";
+			} else {
+				$bv = array_key_exists( $this->strip_qualifier( $pcol ), $row ) ? $row[ $this->strip_qualifier( $pcol ) ] : null;
+				if ( null === $bv ) {
+					return;
+				}
+				$where[] = "`{$child_table}`.`{$child_fk}` = '" . esc_sql( $bv ) . "'";
+			}
+			foreach ( $vias as $vj ) {
+				list( $lt, $lc ) = $qual( $vj['left_col'] );
+				list( $rt, $rc ) = $qual( $vj['right_col'] );
+				$is_l = ( $lt === $base_tbl );
+				$is_r = ( $rt === $base_tbl );
+				if ( $is_l || $is_r ) {
+					$base_col = $is_l ? $lc : $rc;
+					$ot       = $is_l ? $rt : $lt;
+					$oc       = $is_l ? $rc : $lc;
+					$bv       = array_key_exists( $base_col, $row ) ? $row[ $base_col ] : null;
+					if ( null === $bv ) {
+						return;
+					}
+					if ( $ot !== $base_tbl ) {
+						$tables[ $ot ] = true;
+					}
+					$where[] = "`{$ot}`.`{$oc}` = '" . esc_sql( $bv ) . "'";
+				} else {
+					if ( $lt !== $base_tbl ) {
+						$tables[ $lt ] = true;
+					}
+					if ( $rt !== $base_tbl ) {
+						$tables[ $rt ] = true;
+					}
+					$where[] = "`{$lt}`.`{$lc}` = `{$rt}`.`{$rc}`";
+				}
+			}
+			$from = "`{$child_table}`";
+			foreach ( array_keys( $tables ) as $t ) {
+				if ( $t && $t !== $child_table ) {
+					$from .= ", `{$t}`";
+				}
+			}
+			$sql = "SELECT `{$child_table}`.* FROM {$from} WHERE " . implode( ' AND ', $where ) . $order;
 		}
 
 		$child_rows = $this->ext->query( $sql );

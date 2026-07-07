@@ -298,10 +298,18 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 				<label><?php esc_html_e( 'Child FK column', 'db-migrator' ); ?>
 					<select class="dbmig-rep-fk"></select>
 				</label>
+				<label title="<?php esc_attr_e( 'Column the child FK matches. Blank = the parent source id. Or a “link via” table column (e.g. chip_counts.id).', 'db-migrator' ); ?>"><?php esc_html_e( 'matches', 'db-migrator' ); ?>
+					<select class="dbmig-rep-parentcol"></select>
+				</label>
 				<label><?php esc_html_e( 'Order by', 'db-migrator' ); ?>
 					<select class="dbmig-rep-orderby"></select>
 				</label>
 				<button type="button" class="button-link dbmig-remove"><?php esc_html_e( 'Remove repeater', 'db-migrator' ); ?></button>
+			</div>
+			<div class="dbmig-rep-via">
+				<span class="dbmig-rep-via-label"><?php esc_html_e( 'Link via (optional intermediate tables):', 'db-migrator' ); ?></span>
+				<div class="dbmig-rep-via-list"></div>
+				<button type="button" class="button button-small dbmig-rep-addvia"><?php esc_html_e( '+ link table', 'db-migrator' ); ?></button>
 			</div>
 			<table class="dbmig-submap widefat">
 				<thead><tr><th><?php esc_html_e( 'Sub field', 'db-migrator' ); ?></th><th><?php esc_html_e( 'Child column', 'db-migrator' ); ?></th><th><?php esc_html_e( 'Resolve relation (legacy table)', 'db-migrator' ); ?></th><th></th></tr></thead>

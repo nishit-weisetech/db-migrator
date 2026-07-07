@@ -910,10 +910,65 @@
 				self.refreshRepeaterSubFields( $row );
 			} );
 
+			// "Link via" intermediate joins + the parent-match column.
+			$row.find( '.dbmig-rep-addvia' ).on( 'click', function () { self.addRepeaterViaRow( $row, {} ); } );
+			$row.find( '.dbmig-rep-parentcol' ).attr( 'data-want', data.parent_col || '' );
+			( data.joins || [] ).forEach( function ( v ) { self.addRepeaterViaRow( $row, v ); } );
+
 			( data.sub_map || [] ).forEach( function ( s ) { self.addSubMapRow( $row, s ); } );
 			if ( data.child_table ) { fillChild(); }
 			self.refreshRepeaterSubFields( $row );
+			self.refreshRepeaterVia( $row );
 			return $row;
+		},
+
+		// Qualified column options (base table + this repeater's "link via" tables)
+		// for the parent-match column and the via-join ON dropdowns.
+		repeaterColOptions: function ( $row ) {
+			var self = this;
+			var html = '<option value="">— column —</option>';
+			var addG = function ( tbl ) {
+				if ( ! tbl ) { return; }
+				var cols = self.columnsByTable[ tbl ];
+				if ( ! cols || ! cols.length ) { return; }
+				var alias = self.tableAlias( tbl );
+				html += '<optgroup label="' + tbl + '">';
+				cols.forEach( function ( c ) { html += '<option value="' + alias + '.' + c.name + '">' + alias + '.' + c.name + '</option>'; } );
+				html += '</optgroup>';
+			};
+			addG( $( '#dbmig-source-table' ).val() );
+			$row.find( '.dbmig-via-table' ).each( function () { addG( $( this ).val() ); } );
+			return html;
+		},
+
+		refreshRepeaterVia: function ( $row ) {
+			var html = this.repeaterColOptions( $row );
+			$row.find( '.dbmig-rep-parentcol, .dbmig-via-left, .dbmig-via-right' ).each( function () {
+				var want = $( this ).val() || $( this ).attr( 'data-want' ) || '';
+				$( this ).html( html );
+				if ( want ) { $( this ).val( want ); }
+			} );
+		},
+
+		addRepeaterViaRow: function ( $row, d ) {
+			d = d || {};
+			var self = this;
+			var $v = $( '<div class="dbmig-rep-via-row"></div>' );
+			$v.append( '<select class="dbmig-via-table dbmig-tablelist">' + this.tableOptionsHtml() + '</select>' );
+			$v.append( ' ON <select class="dbmig-via-left"></select> = <select class="dbmig-via-right"></select> ' );
+			$v.append( '<button type="button" class="button-link dbmig-via-remove" title="Remove">✕</button>' );
+			$row.find( '.dbmig-rep-via-list' ).append( $v );
+			if ( d.table ) { $v.find( '.dbmig-via-table' ).val( d.table ); }
+			if ( d.left_col ) { $v.find( '.dbmig-via-left' ).attr( 'data-want', d.left_col ); }
+			if ( d.right_col ) { $v.find( '.dbmig-via-right' ).attr( 'data-want', d.right_col ); }
+			$v.find( '.dbmig-via-table' ).on( 'change', function () {
+				var t = $( this ).val();
+				if ( t ) { self.loadColumns( t ).then( function () { self.refreshRepeaterVia( $row ); } ); }
+			} );
+			$v.find( '.dbmig-via-remove' ).on( 'click', function () { $v.remove(); self.refreshRepeaterVia( $row ); } );
+			if ( d.table ) { this.loadColumns( d.table ).then( function () { self.refreshRepeaterVia( $row ); } ); }
+			this.refreshRepeaterVia( $row );
+			return $v;
 		},
 
 		subFieldOptionsFor: function ( repeaterKey ) {
@@ -1206,12 +1261,24 @@
 						rel_table: $s.find( '.dbmig-sub-reltable' ).val() || ''
 					} );
 				} );
+				var repJoins = [];
+				$r.find( '.dbmig-rep-via-row' ).each( function () {
+					var $v = $( this );
+					var vt = $v.find( '.dbmig-via-table' ).val();
+					var vl = $v.find( '.dbmig-via-left' ).val();
+					var vrt = $v.find( '.dbmig-via-right' ).val();
+					if ( vt && vl && vrt ) {
+						repJoins.push( { type: 'LEFT', table: vt, left_col: vl, right_col: vrt } );
+					}
+				} );
 				p.repeaters.push( {
 					acf_field: acfField,
 					acf_name: $r.find( '.dbmig-rep-field option:selected' ).data( 'name' ) || '',
 					child_table: childTable,
 					child_fk: $r.find( '.dbmig-rep-fk' ).val(),
+					parent_col: $r.find( '.dbmig-rep-parentcol' ).val() || '',
 					order_by: $r.find( '.dbmig-rep-orderby' ).val(),
+					joins: repJoins,
 					sub_map: subMap
 				} );
 			} );

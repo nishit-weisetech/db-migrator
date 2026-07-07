@@ -213,8 +213,11 @@ class DBMig_SQL_Builder {
 			$lines = array_merge( $lines, $author_lines );
 		}
 
+		/* ---- 6. ACF repeaters (child tables -> indexed meta) ---- */
+		$lines = array_merge( $lines, $this->build_repeaters( $base, $ltn ) );
+
 		$lines[] = '';
-		$lines[] = '-- Note: ACF repeaters and multi-value ACF relationships still run through "Run import".';
+		$lines[] = '-- Note: multi-value ACF relationships sourced from a single column still run via "Run import".';
 		$lines = array_merge( $lines, $this->footer() );
 
 		return implode( "\n", $lines );
@@ -656,7 +659,9 @@ class DBMig_SQL_Builder {
 			}
 		}
 
-		$lines[] = '-- Note: ACF repeaters and multi-value relationships still run via "Run import".';
+		/* ---- 5. ACF repeaters ---- */
+		$lines = array_merge( $lines, $this->build_repeaters( $base, $ltn ) );
+
 		$lines = array_merge( $lines, $this->footer() );
 		return implode( "\n", $lines );
 	}
@@ -796,7 +801,9 @@ class DBMig_SQL_Builder {
 			}
 		}
 
-		$lines[] = '-- Note: ACF repeaters and multi-value relationships still run via "Run import".';
+		/* ---- 5. ACF repeaters ---- */
+		$lines = array_merge( $lines, $this->build_repeaters( $base, $ltn ) );
+
 		$lines = array_merge( $lines, $this->footer() );
 		return implode( "\n", $lines );
 	}
@@ -929,7 +936,9 @@ class DBMig_SQL_Builder {
 		$lines[] = "UPDATE `{$wpdb->posts}` p SET p.comment_count = (SELECT COUNT(*) FROM `{$wpdb->comments}` c WHERE c.comment_post_ID = p.ID AND c.comment_approved = '1')";
 		$lines[] = "WHERE p.ID IN (SELECT DISTINCT comment_post_ID FROM `{$wpdb->comments}` WHERE legacy_table_name = '{$ltn}' AND comment_post_ID > 0);";
 
-		$lines[] = '-- Note: ACF repeaters and multi-value relationships still run via "Run import".';
+		/* ---- 6. ACF repeaters (comment meta) ---- */
+		$lines = array_merge( $lines, $this->build_repeaters( $base, $ltn ) );
+
 		$lines = array_merge( $lines, $this->footer() );
 		return implode( "\n", $lines );
 	}
@@ -988,6 +997,125 @@ class DBMig_SQL_Builder {
 		}
 		$out[] = '';
 		return $out;
+	}
+
+	/* ===================================================================== *
+	 *  ACF REPEATERS (child table -> indexed meta rows)
+	 * ===================================================================== */
+
+	/**
+	 * Generate the meta rows an ACF repeater is stored as. For a repeater `field`
+	 * with sub-fields, ACF stores, per migrated object:
+	 *   field                    = <row count>
+	 *   _field                   = <repeater field key>
+	 *   field_{i}_{sub}          = <value>      (each row i, each sub-field)
+	 *   _field_{i}_{sub}         = <sub key>
+	 * We build these with a window function (ROW_NUMBER per object) over the child
+	 * table joined to the migrated object. Idempotent (delete-then-insert). Works
+	 * for post / attachment / user / term / comment targets.
+	 */
+	private function build_repeaters( $base, $ltn ) {
+		if ( empty( $this->profile['repeaters'] ) || ! is_array( $this->profile['repeaters'] ) ) {
+			return array();
+		}
+		global $wpdb;
+		$type = $this->profile['migration_type'] ?? 'post';
+		if ( 'user' === $type ) {
+			$mt = $wpdb->usermeta; $ot = $wpdb->users; $oc = 'ID'; $fk = 'user_id';
+		} elseif ( 'term' === $type ) {
+			$mt = $wpdb->termmeta; $ot = $wpdb->terms; $oc = 'term_id'; $fk = 'term_id';
+		} elseif ( 'comment' === $type ) {
+			$mt = $wpdb->commentmeta; $ot = $wpdb->comments; $oc = 'comment_ID'; $fk = 'comment_id';
+		} else {
+			$mt = $wpdb->postmeta; $ot = $wpdb->posts; $oc = 'ID'; $fk = 'post_id';
+		}
+		$is_post   = in_array( $type, array( 'post', 'attachment' ), true );
+		$src_db    = $this->id( $this->source_db );
+		$id_col    = $this->id( $this->profile['source_id_column'] );
+		$key       = "`{$base}`.`{$id_col}`";
+		$obj_on    = "o.legacy_table_name = '{$ltn}' AND o.legacy_id = {$key}" . ( $is_post ? ' AND ' . $this->pt_cond( 'o' ) : '' );
+		$obj_scope = "o.legacy_table_name = '{$ltn}'" . ( $is_post ? ' AND ' . $this->pt_cond( 'o' ) : '' );
+
+		$lines = array();
+		foreach ( $this->profile['repeaters'] as $rep ) {
+			$field = $this->id( $rep['acf_name'] ?? '' );
+			$fkey  = esc_sql( $rep['acf_field'] ?? '' );
+			$child = $this->id( $rep['child_table'] ?? '' );
+			$cfk   = $this->id( $rep['child_fk'] ?? '' );
+			// The column the child FK matches — bare (a base column) or qualified
+			// (a column on an intermediate "link via" table, e.g. chip_counts.id).
+			$pcol_raw = ! empty( $rep['parent_col'] ) ? $rep['parent_col'] : $this->profile['source_id_column'];
+			$pcol_ref = $this->qualify_expr( $pcol_raw, $base );
+			$subs     = ( ! empty( $rep['sub_map'] ) && is_array( $rep['sub_map'] ) ) ? $rep['sub_map'] : array();
+			if ( '' === $field || '' === $child || '' === $cfk || empty( $subs ) ) {
+				continue;
+			}
+			$order = ! empty( $rep['order_by'] ) ? "`{$child}`.`" . $this->id( $rep['order_by'] ) . '`' : "`{$child}`.`{$cfk}`";
+			// Escape LIKE metacharacters in the field name (underscores especially).
+			$fesc = str_replace( array( '\\', '_', '%' ), array( '\\\\', '\\_', '\\%' ), $field );
+
+			// Optional intermediate "link via" joins (child reaches the parent through
+			// one or more tables, e.g. chip_count_rows -> chip_counts -> events).
+			$via = '';
+			if ( ! empty( $rep['joins'] ) && is_array( $rep['joins'] ) ) {
+				foreach ( $rep['joins'] as $vj ) {
+					if ( empty( $vj['table'] ) || empty( $vj['left_col'] ) || empty( $vj['right_col'] ) ) {
+						continue;
+					}
+					$vt    = $this->id( $vj['table'] );
+					$vtype = ( 'INNER' === ( $vj['type'] ?? 'LEFT' ) ) ? 'INNER' : 'LEFT';
+					$vl    = $this->qualify_expr( $vj['left_col'], $base );
+					$vr    = $this->qualify_expr( $vj['right_col'], $base );
+					$via  .= "\n  {$vtype} JOIN `{$src_db}`.`{$vt}` AS `{$vt}` ON {$vl} = {$vr}";
+				}
+			}
+
+			$from = "`{$src_db}`.`{$base}` AS `{$base}`\n"
+				. "  JOIN `{$ot}` o ON {$obj_on}"
+				. $via
+				. "\n  JOIN `{$src_db}`.`{$child}` AS `{$child}` ON `{$child}`.`{$cfk}` = {$pcol_ref}";
+
+			$lines[] = '';
+			$lines[] = "-- ===== ACF repeater: {$field}  (from {$rep['child_table']}) =====";
+
+			// 0) Clear existing repeater meta (count + field-key ref + every row).
+			$lines[] = "DELETE m FROM `{$mt}` m JOIN `{$ot}` o ON o.`{$oc}` = m.`{$fk}` AND {$obj_scope}";
+			$lines[] = "  WHERE m.meta_key = '{$field}' OR m.meta_key = '_{$field}' OR m.meta_key LIKE '{$fesc}\\_%' OR m.meta_key LIKE '\\_{$fesc}\\_%';";
+
+			// 1) Row count + field-key reference.
+			$lines[] = "INSERT INTO `{$mt}` (`{$fk}`, meta_key, meta_value)";
+			$lines[] = "SELECT o.`{$oc}`, '{$field}', CAST(COUNT(*) AS CHAR)";
+			$lines[] = "FROM {$from}";
+			$lines[] = "GROUP BY o.`{$oc}`;";
+			$lines[] = "INSERT INTO `{$mt}` (`{$fk}`, meta_key, meta_value)";
+			$lines[] = "SELECT DISTINCT o.`{$oc}`, '_{$field}', '{$fkey}'";
+			$lines[] = "FROM {$from};";
+
+			// 2) Per sub-field: value + sub-key, indexed by the per-object row number.
+			$rows = "(SELECT o.`{$oc}` AS dbmig_oid, (ROW_NUMBER() OVER (PARTITION BY o.`{$oc}` ORDER BY {$order}) - 1) AS dbmig_rn, `{$child}`.*\n     FROM {$from}) rr";
+			foreach ( $subs as $sub ) {
+				$sname = $this->id( ! empty( $sub['sub_name'] ) ? $sub['sub_name'] : ( $sub['sub_field'] ?? '' ) );
+				$skey  = esc_sql( $sub['sub_field'] ?? '' );
+				if ( '' === $sname || empty( $sub['source'] ) ) {
+					continue;
+				}
+				$scol = ( false !== strpos( $sub['source'], '.' ) ) ? substr( $sub['source'], strrpos( $sub['source'], '.' ) + 1 ) : $sub['source'];
+				$scol = $this->id( $scol );
+				if ( ! empty( $sub['rel_table'] ) ) {
+					$rt  = esc_sql( $sub['rel_table'] );
+					$val = "(SELECT rp.ID FROM `{$wpdb->posts}` rp WHERE rp.legacy_table_name = '{$rt}' AND rp.legacy_id = rr.`{$scol}` LIMIT 1)";
+				} else {
+					$val = "rr.`{$scol}`";
+				}
+				$lines[] = "INSERT INTO `{$mt}` (`{$fk}`, meta_key, meta_value)";
+				$lines[] = "SELECT rr.dbmig_oid, CONCAT('{$field}_', rr.dbmig_rn, '_{$sname}'), {$val}";
+				$lines[] = "FROM {$rows} WHERE {$val} IS NOT NULL;";
+				$lines[] = "INSERT INTO `{$mt}` (`{$fk}`, meta_key, meta_value)";
+				$lines[] = "SELECT rr.dbmig_oid, CONCAT('_{$field}_', rr.dbmig_rn, '_{$sname}'), '{$skey}'";
+				$lines[] = "FROM {$rows};";
+			}
+		}
+		return $lines;
 	}
 
 	/* ===================================================================== *
@@ -1151,7 +1279,7 @@ class DBMig_SQL_Builder {
 			// through a one-to-many junction, and relation_meta_block() runs on its
 			// own fanned-out FROM. Including it here would fan out the post INSERT and
 			// create duplicate posts.
-			if ( in_array( $f['target_kind'], array( 'post_field', 'post_meta', 'acf' ), true ) ) {
+			if ( in_array( $f['target_kind'], array( 'post_field', 'post_meta', 'acf', 'term_field', 'term_meta', 'user_field', 'user_meta', 'comment_field', 'comment_meta' ), true ) ) {
 				$add_table( $f['source'] ?? '' );
 			}
 		}
