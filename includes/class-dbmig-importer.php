@@ -1145,8 +1145,8 @@ class DBMig_Importer {
 			if ( $tbl === $base ) {
 				return; // already covered by base.*
 			}
-			$tbl_safe = preg_replace( '/[^A-Za-z0-9_]/', '', $tbl );
-			$col_safe = preg_replace( '/[^A-Za-z0-9_]/', '', $col );
+			$tbl_safe = preg_replace( '/[^A-Za-z0-9_-]/', '', $tbl );
+			$col_safe = preg_replace( '/[^A-Za-z0-9_-]/', '', $col );
 			if ( ! $tbl_safe || ! $col_safe ) {
 				return;
 			}
@@ -1186,7 +1186,7 @@ class DBMig_Importer {
 			return null;
 		}
 		list( $dt ) = explode( '.', $f['source'], 2 );
-		$detail     = preg_replace( '/[^A-Za-z0-9_]/', '', $dt );
+		$detail     = preg_replace( '/[^A-Za-z0-9_-]/', '', $dt );
 		if ( $detail === $this->profile['source_table'] ) {
 			return null;
 		}
@@ -1202,8 +1202,8 @@ class DBMig_Importer {
 			foreach ( array( $j['left_col'], $j['right_col'] ) as $c ) {
 				if ( $c && false !== strpos( $c, '.' ) ) {
 					list( $t, $col ) = explode( '.', $c, 2 );
-					if ( preg_replace( '/[^A-Za-z0-9_]/', '', $t ) === $detail_table ) {
-						return preg_replace( '/[^A-Za-z0-9_]/', '', $col );
+					if ( preg_replace( '/[^A-Za-z0-9_-]/', '', $t ) === $detail_table ) {
+						return preg_replace( '/[^A-Za-z0-9_-]/', '', $col );
 					}
 				}
 			}
@@ -1214,12 +1214,12 @@ class DBMig_Importer {
 	private function qualify( $col ) {
 		if ( false !== strpos( $col, '.' ) ) {
 			list( $t, $c ) = explode( '.', $col, 2 );
-			$t = preg_replace( '/[^A-Za-z0-9_]/', '', $t );
-			$c = preg_replace( '/[^A-Za-z0-9_]/', '', $c );
+			$t = preg_replace( '/[^A-Za-z0-9_-]/', '', $t );
+			$c = preg_replace( '/[^A-Za-z0-9_-]/', '', $c );
 			return "`{$t}`.`{$c}`";
 		}
 		$base = $this->ext->safe_identifier( $this->table_alias( $this->profile['source_table'] ) );
-		$c    = preg_replace( '/[^A-Za-z0-9_]/', '', $col );
+		$c    = preg_replace( '/[^A-Za-z0-9_-]/', '', $col );
 		return "`{$base}`.`{$c}`";
 	}
 }

@@ -199,7 +199,7 @@ class DBMig_External_DB {
 	 */
 	public function safe_identifier( $name ) {
 		$name = (string) $name;
-		if ( preg_match( '/^[A-Za-z0-9_]+$/', $name ) ) {
+		if ( preg_match( '/^[A-Za-z0-9_-]+$/', $name ) ) {
 			return $name;
 		}
 		return false;

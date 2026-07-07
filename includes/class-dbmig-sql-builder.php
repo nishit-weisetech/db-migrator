@@ -1573,7 +1573,7 @@ class DBMig_SQL_Builder {
 	}
 
 	private function id( $name ) {
-		return preg_replace( '/[^A-Za-z0-9_]/', '', (string) $name );
+		return preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $name );
 	}
 
 	/**
