@@ -173,6 +173,7 @@ Join 2:  LEFT JOIN  category          ON  news_categories.cat_id = category.id</
 				<ul class="dbmig-bullets" style="margin-top:4px">
 					<li><strong>Child FK column</strong> = the column on the <em>child</em> table that points back to the parent (e.g. <code>prizes.event_id</code>) — <strong>not</strong> the child's own primary key. Getting this wrong yields empty or one-row repeaters. The <strong>matches</strong> dropdown next to it is what the FK equals (blank = the parent source id).</li>
 					<li><strong>Indirect linkage (“Link via”).</strong> When the child reaches the parent through <em>another table</em> (e.g. <code>chip_count_rows → chip_counts → events</code>), add the intermediate with <strong>+ link table</strong>: pick the table and its ON columns (<code>chip_counts.event_id = events.id</code>), then set <strong>Child FK</strong> = <code>chip_count_id</code> and <strong>matches</strong> = <code>chip_counts.id</code>. You can chain several.</li>
+					<li><strong>“latest by”</strong> on a link-via table: when the intermediate has <em>many</em> rows per parent but you only want the newest one (e.g. the <em>current</em> chip-count snapshot per event, not every historical one), set <strong>latest by</strong> to a date/id column (<code>created_at</code>). Only that latest row's children are used — otherwise every snapshot's rows pile up.</li>
 				</ul>
 			</li>
 		</ul>

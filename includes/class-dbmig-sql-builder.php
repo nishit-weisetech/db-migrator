@@ -1058,6 +1058,13 @@ class DBMig_SQL_Builder {
 			// one or more tables, e.g. chip_count_rows -> chip_counts -> events).
 			$via = '';
 			if ( ! empty( $rep['joins'] ) && is_array( $rep['joins'] ) ) {
+				$parse = function ( $ref ) use ( $base ) {
+					if ( false !== strpos( $ref, '.' ) ) {
+						list( $t, $c ) = explode( '.', $ref, 2 );
+						return array( $this->id( $t ), $this->id( $c ) );
+					}
+					return array( $base, $this->id( $ref ) );
+				};
 				foreach ( $rep['joins'] as $vj ) {
 					if ( empty( $vj['table'] ) || empty( $vj['left_col'] ) || empty( $vj['right_col'] ) ) {
 						continue;
@@ -1066,7 +1073,31 @@ class DBMig_SQL_Builder {
 					$vtype = ( 'INNER' === ( $vj['type'] ?? 'LEFT' ) ) ? 'INNER' : 'LEFT';
 					$vl    = $this->qualify_expr( $vj['left_col'], $base );
 					$vr    = $this->qualify_expr( $vj['right_col'], $base );
-					$via  .= "\n  {$vtype} JOIN `{$src_db}`.`{$vt}` AS `{$vt}` ON {$vl} = {$vr}";
+
+					// "latest by": keep only the newest row of this via table per its
+					// parent group (e.g. the current chip_counts snapshot per event).
+					$latest = '';
+					if ( ! empty( $vj['latest_by'] ) ) {
+						list( $lt, $lc ) = $parse( $vj['left_col'] );
+						list( $rt, $rc ) = $parse( $vj['right_col'] );
+						if ( $lt === $vt ) {
+							$group_col = $lc;
+							$parent_val = $vr;
+						} else {
+							$group_col = $rc;
+							$parent_val = $vl;
+						}
+						$keycol = 'id';
+						if ( false !== strpos( $pcol_raw, '.' ) ) {
+							list( $ppt, $ppc ) = explode( '.', $pcol_raw, 2 );
+							if ( $this->id( $ppt ) === $vt ) {
+								$keycol = $this->id( $ppc );
+							}
+						}
+						$lb      = $this->id( $vj['latest_by'] );
+						$latest  = " AND `{$vt}`.`{$keycol}` = (SELECT `s`.`{$keycol}` FROM `{$src_db}`.`{$vt}` `s` WHERE `s`.`{$group_col}` = {$parent_val} ORDER BY `s`.`{$lb}` DESC, `s`.`{$keycol}` DESC LIMIT 1)";
+					}
+					$via .= "\n  {$vtype} JOIN `{$src_db}`.`{$vt}` AS `{$vt}` ON {$vl} = {$vr}{$latest}";
 				}
 			}
 

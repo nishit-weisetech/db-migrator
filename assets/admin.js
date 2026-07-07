@@ -956,17 +956,25 @@
 			var $v = $( '<div class="dbmig-rep-via-row"></div>' );
 			$v.append( '<select class="dbmig-via-table dbmig-tablelist">' + this.tableOptionsHtml() + '</select>' );
 			$v.append( ' ON <select class="dbmig-via-left"></select> = <select class="dbmig-via-right"></select> ' );
+			$v.append( '<span title="Keep only the newest matching row per parent (e.g. the current snapshot)">latest by <select class="dbmig-via-latest"><option value="">(all rows)</option></select></span> ' );
 			$v.append( '<button type="button" class="button-link dbmig-via-remove" title="Remove">✕</button>' );
 			$row.find( '.dbmig-rep-via-list' ).append( $v );
 			if ( d.table ) { $v.find( '.dbmig-via-table' ).val( d.table ); }
 			if ( d.left_col ) { $v.find( '.dbmig-via-left' ).attr( 'data-want', d.left_col ); }
 			if ( d.right_col ) { $v.find( '.dbmig-via-right' ).attr( 'data-want', d.right_col ); }
+			var fillLatest = function () {
+				var t = $v.find( '.dbmig-via-table' ).val();
+				var cols = self.columnsByTable[ t ] || [];
+				var h = '<option value="">(all rows)</option>';
+				cols.forEach( function ( c ) { h += '<option value="' + c.name + '">' + c.name + '</option>'; } );
+				$v.find( '.dbmig-via-latest' ).html( h ).val( d.latest_by || '' );
+			};
 			$v.find( '.dbmig-via-table' ).on( 'change', function () {
 				var t = $( this ).val();
-				if ( t ) { self.loadColumns( t ).then( function () { self.refreshRepeaterVia( $row ); } ); }
+				if ( t ) { self.loadColumns( t ).then( function () { self.refreshRepeaterVia( $row ); fillLatest(); } ); }
 			} );
 			$v.find( '.dbmig-via-remove' ).on( 'click', function () { $v.remove(); self.refreshRepeaterVia( $row ); } );
-			if ( d.table ) { this.loadColumns( d.table ).then( function () { self.refreshRepeaterVia( $row ); } ); }
+			if ( d.table ) { this.loadColumns( d.table ).then( function () { self.refreshRepeaterVia( $row ); fillLatest(); } ); }
 			this.refreshRepeaterVia( $row );
 			return $v;
 		},
@@ -1268,7 +1276,7 @@
 					var vl = $v.find( '.dbmig-via-left' ).val();
 					var vrt = $v.find( '.dbmig-via-right' ).val();
 					if ( vt && vl && vrt ) {
-						repJoins.push( { type: 'LEFT', table: vt, left_col: vl, right_col: vrt } );
+						repJoins.push( { type: 'LEFT', table: vt, left_col: vl, right_col: vrt, latest_by: $v.find( '.dbmig-via-latest' ).val() || '' } );
 					}
 				} );
 				p.repeaters.push( {

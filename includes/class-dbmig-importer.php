@@ -900,6 +900,20 @@ class DBMig_Importer {
 						$tables[ $ot ] = true;
 					}
 					$where[] = "`{$ot}`.`{$oc}` = '" . esc_sql( $bv ) . "'";
+					// "latest by": restrict this via table to its newest row per parent.
+					if ( ! empty( $vj['latest_by'] ) ) {
+						$lb  = $this->ext->safe_identifier( $vj['latest_by'] );
+						$kec = 'id';
+						if ( ! empty( $rep['parent_col'] ) && false !== strpos( $rep['parent_col'], '.' ) ) {
+							list( $ppt, $ppc ) = explode( '.', $rep['parent_col'], 2 );
+							if ( $this->ext->safe_identifier( $ppt ) === $ot ) {
+								$kec = $this->ext->safe_identifier( $ppc );
+							}
+						}
+						if ( $lb && $kec ) {
+							$where[] = "`{$ot}`.`{$kec}` = (SELECT `s`.`{$kec}` FROM `{$ot}` `s` WHERE `s`.`{$oc}` = '" . esc_sql( $bv ) . "' ORDER BY `s`.`{$lb}` DESC, `s`.`{$kec}` DESC LIMIT 1)";
+						}
+					}
 				} else {
 					if ( $lt !== $base_tbl ) {
 						$tables[ $lt ] = true;

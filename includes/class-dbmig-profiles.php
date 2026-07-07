@@ -246,6 +246,7 @@ class DBMig_Profiles {
 							'type'      => in_array( $rj['type'] ?? 'LEFT', array( 'LEFT', 'INNER' ), true ) ? $rj['type'] : 'LEFT',
 							'left_col'  => sanitize_text_field( $rj['left_col'] ),
 							'right_col' => sanitize_text_field( $rj['right_col'] ),
+							'latest_by' => sanitize_text_field( $rj['latest_by'] ?? '' ),
 						);
 					}
 				}
