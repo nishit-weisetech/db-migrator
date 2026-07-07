@@ -329,11 +329,14 @@
 			var self = this;
 			return Ajax.post( 'get_tables' ).then( function ( r ) {
 				if ( r.success ) {
-					self.tables = r.data.tables;
+					self.tables = r.data.tables || [];
 					self.currentTables = r.data.current || [];
 					self.currentDb = r.data.current_db || '';
 					self.sourceDb = r.data.source_db || '';
 					self.fillTableSelects();
+					if ( r.data.source_error ) {
+						$( '#dbmig-acf-status' ).text( '— Source DB not connected: ' + r.data.source_error + ' (current-DB tables still available). Check Settings.' );
+					}
 				}
 			} );
 		},

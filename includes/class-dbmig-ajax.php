@@ -84,10 +84,18 @@ class DBMig_Ajax {
 		global $wpdb;
 		$ext    = new DBMig_External_DB();
 		$tables = $ext->get_tables();
-		$this->maybe_error( $tables );
 
-		// Also expose the current WordPress database's tables (for joining to
-		// already-migrated content). Same MySQL server, so a cross-DB join works.
+		// A source-DB connection problem must NOT hide the current WordPress DB
+		// tables — those are local and always available. Report the source error
+		// separately instead of aborting the whole response.
+		$source_error = '';
+		if ( is_wp_error( $tables ) ) {
+			$source_error = $tables->get_error_message();
+			$tables       = array();
+		}
+
+		// The current WordPress database's tables (for joining to already-migrated
+		// content). Same MySQL server, so a cross-DB join works.
 		$current = $wpdb->get_col( 'SHOW TABLES' );
 		if ( ! is_array( $current ) ) {
 			$current = array();
@@ -96,10 +104,11 @@ class DBMig_Ajax {
 
 		wp_send_json_success(
 			array(
-				'tables'     => $tables,
-				'source_db'  => $ext->get_database_name(),
-				'current_db' => DB_NAME,
-				'current'    => $current,
+				'tables'       => $tables,
+				'source_db'    => $ext->get_database_name(),
+				'current_db'   => DB_NAME,
+				'current'      => $current,
+				'source_error' => $source_error,
 			)
 		);
 	}
