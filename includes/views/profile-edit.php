@@ -65,6 +65,13 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 					<p class="description"><?php esc_html_e( 'Users → migrate authors / accounts. Taxonomy terms → migrate a legacy table into a taxonomy. Media attachments → create attachment posts in the Media Library (you place the image files into wp-content/uploads yourself, then regenerate sizes).', 'db-migrator' ); ?></p>
 				</td>
 			</tr>
+			<tr class="dbmig-when-hasid">
+				<th scope="row"><?php esc_html_e( 'Preserve source IDs', 'db-migrator' ); ?></th>
+				<td>
+					<label><input type="checkbox" id="dbmig-preserve-id"> <strong><?php esc_html_e( 'Keep the source primary key as the WordPress ID', 'db-migrator' ); ?></strong></label>
+					<p class="description"><?php esc_html_e( 'On insert, give each row the same ID it had in the source (post ID / term_id / user ID / comment ID) instead of a new auto-increment one. Only affects newly created rows — existing ones are matched and updated by legacy id as usual. Make sure those IDs are free in WordPress; a collision with an existing ID will error. Applies on the "Run SQL (fast)" path.', 'db-migrator' ); ?></p>
+				</td>
+			</tr>
 			<tr class="dbmig-when-post">
 				<th scope="row"><label for="dbmig-post-type"><?php esc_html_e( 'Post type', 'db-migrator' ); ?></label></th>
 				<td>

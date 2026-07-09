@@ -32,6 +32,7 @@ $new_url      = admin_url( 'admin.php?page=' . DBMig_Admin::MENU_SLUG . '&action
 	<div class="dbmig-card dbmig-whatsnew">
 		<h2><?php esc_html_e( 'What’s new', 'db-migrator' ); ?></h2>
 		<ul class="dbmig-bullets">
+			<li><strong>Preserve source IDs.</strong> A checkbox on post, user, taxonomy-term and comment migrations to keep each row's original primary key as the WordPress ID (post ID / user ID / term_id / comment ID) on insert, instead of a new auto-increment. Only affects newly created rows; make sure those IDs are free. (<a href="#g-tips">§13</a>)</li>
 			<li><strong>Users from names (normalize).</strong> A new tool that turns a repeated name column with no id (e.g. an author name on every post) into a real users lookup table + id column in the legacy DB, so the normal id-based user migration and author linking work. Same name → one user. (<a href="#g-normalize">§12</a>)</li>
 			<li><strong>Taxonomy-terms migration type.</strong> A third “Migrate into” option: bring a whole category/tag table over — <em>name, slug, description, parent</em>, plus term meta and ACF term fields. (<a href="#g-tax">§6</a>)</li>
 			<li><strong>Join to the current WordPress DB.</strong> The table dropdowns now list your live <code>wp_posts</code> / <code>wp_users</code> / <code>wp_terms</code> alongside the source tables, so you can resolve against already-migrated content by legacy id. (<a href="#g-join">§5</a>)</li>
@@ -296,6 +297,7 @@ WHERE image IS NOT NULL
 			<li><strong>Different collations are handled.</strong> The source and WordPress databases can use different collations.</li>
 			<li><strong>Big tables:</strong> the generated SQL uses indexed, set-based operations. If the server feels slow, raise <code>innodb_buffer_pool_size</code> (MySQL defaults to a tiny 128&nbsp;MB).</li>
 			<li><strong>Users' passwords:</strong> not migrated as working logins via SQL (they aren't WordPress hashes). Use “Run import” or have users reset their password.</li>
+			<li><strong>Preserve source IDs</strong> (checkbox in Step 1; posts, users, terms &amp; comments): keeps each row's original id as the WordPress <code>ID</code> / <code>term_id</code> / <code>comment_ID</code> on insert. Only new rows are affected — already-migrated rows keep the id they got. The target ids must be free; a clash with an existing id will error. Handy when other data references content by its old id. Use the <em>Run SQL (fast)</em> path — it honours this for every type (the PHP import path preserves posts only).</li>
 		</ul>
 	</div>
 </div>

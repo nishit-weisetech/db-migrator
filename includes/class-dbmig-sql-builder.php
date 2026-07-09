@@ -176,6 +176,12 @@ class DBMig_SQL_Builder {
 			'legacy_table_name'     => "'{$ltn}'",
 		);
 
+		// Optionally keep the source primary key as the WordPress post ID. Only
+		// affects new inserts (existing rows are matched/updated by legacy id).
+		if ( ! empty( $this->profile['preserve_id'] ) ) {
+			$cols = array( 'ID' => $key ) + $cols;
+		}
+
 		if ( ! $partial ) {
 			$lines[] = '-- 2) Insert rows that have not been migrated yet.';
 			$lines[] = "INSERT INTO `{$wpdb->posts}`\n  (`" . implode( '`, `', array_keys( $cols ) ) . '`)';
@@ -610,12 +616,20 @@ class DBMig_SQL_Builder {
 		// Join used to reach the WP user for a source row, via the indexed columns.
 		$user_join  = "JOIN `{$wpdb->users}` u ON u.legacy_table_name = '{$ltn}' AND u.legacy_id = {$key}";
 
+		// Optionally keep the source primary key as the WordPress user ID.
+		$user_cols = 'user_login, user_pass, user_nicename, user_email, user_url, user_registered, display_name, legacy_id, legacy_table_name';
+		$user_vals = "{$login_expr}, {$pass_expr}, {$nice_expr}, {$email_expr}, {$url_expr}, {$reg_expr}, {$disp_expr}, {$key}, '{$ltn}'";
+		if ( ! empty( $this->profile['preserve_id'] ) ) {
+			$user_cols = 'ID, ' . $user_cols;
+			$user_vals = "{$key}, " . $user_vals;
+		}
+
 		/* ---- 1. INSERT missing users (skipped in partial mode) ---- */
 		if ( ! $partial ) {
 			$lines[] = '-- 1) Create users that have not been migrated yet.';
 			$lines[] = "INSERT INTO `{$wpdb->users}`";
-			$lines[] = '  (user_login, user_pass, user_nicename, user_email, user_url, user_registered, display_name, legacy_id, legacy_table_name)';
-			$lines[] = "SELECT {$login_expr}, {$pass_expr}, {$nice_expr}, {$email_expr}, {$url_expr}, {$reg_expr}, {$disp_expr}, {$key}, '{$ltn}'";
+			$lines[] = '  (' . $user_cols . ')';
+			$lines[] = 'SELECT ' . $user_vals;
 			$lines[] = "FROM {$from}";
 			$lines[] = "WHERE NOT {$exists_sql};";
 			$lines[] = '';
@@ -748,11 +762,20 @@ class DBMig_SQL_Builder {
 			$lines[] = '';
 		}
 
+		// Optionally keep the source primary key as the WordPress term_id.
+		$preserve  = ! empty( $this->profile['preserve_id'] );
+		$term_cols = 'name, slug, term_group, legacy_id, legacy_table_name';
+		$term_vals = "{$name_expr}, {$slug_expr}, 0, {$key}, '{$ltn}'";
+		if ( $preserve ) {
+			$term_cols = 'term_id, ' . $term_cols;
+			$term_vals = "{$key}, " . $term_vals;
+		}
+
 		/* ---- 1 & 2. Create missing terms + attach (skipped in partial mode) ---- */
 		if ( ! $partial ) {
 			$lines[] = '-- 1) Create terms that have not been migrated yet.';
-			$lines[] = "INSERT INTO `{$wpdb->terms}` (name, slug, term_group, legacy_id, legacy_table_name)";
-			$lines[] = "SELECT {$name_expr}, {$slug_expr}, 0, {$key}, '{$ltn}'";
+			$lines[] = "INSERT INTO `{$wpdb->terms}` ({$term_cols})";
+			$lines[] = "SELECT {$term_vals}";
 			$lines[] = "FROM {$from}";
 			$lines[] = "WHERE NOT {$exists};";
 			$lines[] = '';
@@ -915,6 +938,10 @@ class DBMig_SQL_Builder {
 				'legacy_id'            => $key,
 				'legacy_table_name'    => "'{$ltn}'",
 			);
+			// Optionally keep the source primary key as the WordPress comment_ID.
+			if ( ! empty( $this->profile['preserve_id'] ) ) {
+				$cols = array( 'comment_ID' => $key ) + $cols;
+			}
 			$lines[] = '-- 2) Insert comments that have not been migrated yet.';
 			$lines[] = "INSERT INTO `{$wpdb->comments}`\n  (`" . implode( '`, `', array_keys( $cols ) ) . '`)';
 			$lines[] = 'SELECT ' . implode( ",\n    ", array_values( $cols ) );

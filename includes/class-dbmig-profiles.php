@@ -146,6 +146,7 @@ class DBMig_Profiles {
 			'role'             => isset( $raw['role'] ) ? sanitize_key( $raw['role'] ) : 'subscriber',
 			'post_status'      => isset( $raw['post_status'] ) ? sanitize_key( $raw['post_status'] ) : 'publish',
 			'partial'          => ! empty( $raw['partial'] ) ? 1 : 0,
+			'preserve_id'      => ! empty( $raw['preserve_id'] ) ? 1 : 0,
 			'source_table'     => isset( $raw['source_table'] ) ? sanitize_text_field( $raw['source_table'] ) : '',
 			'source_id_column' => isset( $raw['source_id_column'] ) ? sanitize_text_field( $raw['source_id_column'] ) : '',
 			'joins'            => array(),

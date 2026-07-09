@@ -320,6 +320,8 @@
 			$( '.dbmig-when-term' ).toggle( t === 'term' );
 			$( '.dbmig-when-attachment' ).toggle( t === 'attachment' );
 			$( '.dbmig-when-comment' ).toggle( t === 'comment' );
+			// "Preserve source IDs" applies to every id-bearing type.
+			$( '.dbmig-when-hasid' ).toggle( t === 'post' || t === 'attachment' || t === 'term' || t === 'user' || t === 'comment' );
 			this.loadAcf();          // reloads with proper context, then rebuilds list
 			this.refreshExtraKinds();
 		},
@@ -1042,6 +1044,7 @@
 			if ( p.taxonomy ) { $( '#dbmig-taxonomy' ).val( p.taxonomy ); }
 			if ( p.role ) { $( '#dbmig-role' ).val( p.role ); }
 			$( '#dbmig-partial' ).prop( 'checked', !! p.partial );
+			$( '#dbmig-preserve-id' ).prop( 'checked', !! p.preserve_id );
 
 			var mt = p.migration_type || 'post';
 			$( '.dbmig-when-post' ).toggle( mt === 'post' );
@@ -1049,6 +1052,7 @@
 			$( '.dbmig-when-term' ).toggle( mt === 'term' );
 			$( '.dbmig-when-attachment' ).toggle( mt === 'attachment' );
 			$( '.dbmig-when-comment' ).toggle( mt === 'comment' );
+			$( '.dbmig-when-hasid' ).toggle( mt === 'post' || mt === 'attachment' || mt === 'term' || mt === 'user' || mt === 'comment' );
 
 			// Prepare fixed-row values (restored in rebuildFieldList) and collect the
 			// extra rows (custom meta / taxonomy). Extra rows are built AFTER the
@@ -1157,6 +1161,7 @@
 				post_status: $( '#dbmig-post-status' ).val(),
 				role: $( '#dbmig-role' ).val(),
 				partial: $( '#dbmig-partial' ).is( ':checked' ) ? 1 : 0,
+				preserve_id: $( '#dbmig-preserve-id' ).is( ':checked' ) ? 1 : 0,
 				source_table: $( '#dbmig-source-table' ).val(),
 				source_id_column: $( '#dbmig-source-id' ).val(),
 				joins: [],

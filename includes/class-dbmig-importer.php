@@ -152,6 +152,10 @@ class DBMig_Importer {
 			$post_id       = wp_update_post( $postarr, true );
 			$action        = 'updated';
 		} else {
+			if ( ! empty( $this->profile['preserve_id'] ) && is_numeric( $legacy_id ) ) {
+				// Use the source primary key as the new post ID (only if it is free).
+				$postarr['import_id'] = (int) $legacy_id;
+			}
 			$post_id = wp_insert_post( $postarr, true );
 			$action  = 'created';
 		}
