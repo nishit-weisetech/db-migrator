@@ -1305,6 +1305,28 @@
 				$res.removeClass( 'ok' ).addClass( 'err' ).text( 'Select a source table and its ID column first.' );
 				return;
 			}
+			// Soft warning only: for a post migration, flag the common core fields
+			// left unmapped (blank source = skip). Does NOT block saving — if it's
+			// intentional the user just confirms.
+			if ( p.migration_type === 'post' ) {
+				var core = { post_title: 'Title (post_title)', post_content: 'Content (post_content)', post_name: 'Slug (post_name)', post_date: 'Date (post_date)' };
+				var missing = [];
+				$.each( core, function ( target, label ) {
+					var mapped = ( p.fields || [] ).some( function ( f ) {
+						return 'post_field' === f.target_kind && f.target === target && f.source;
+					} );
+					if ( ! mapped ) { missing.push( label ); }
+				} );
+				if ( missing.length && ! window.confirm(
+					'These fields have no source column and will be left empty:\n\n  • ' +
+					missing.join( '\n  • ' ) +
+					'\n\nThat\'s fine if it\'s intentional. Save the migration anyway?'
+				) ) {
+					$res.removeClass( 'ok err' ).text( '' );
+					return;
+				}
+			}
+
 			$res.removeClass( 'ok err' ).text( DBMig.i18n.saving );
 			Ajax.post( 'save_profile', { profile: JSON.stringify( p ) } ).done( function ( r ) {
 				if ( r.success ) {
