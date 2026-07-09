@@ -355,9 +355,12 @@ class DBMig_SQL_Builder {
 				$lines[] = "  JOIN `{$wpdb->term_taxonomy}` tt ON tt.term_taxonomy_id = r.term_taxonomy_id AND tt.taxonomy = '{$tax}';";
 			}
 
-			// 4) Assign terms to posts by walking the join chain.
+			// 4) Assign terms to posts by walking the join chain. DISTINCT because the
+			//    fanned-out join chain (or unrelated joins present for other fields)
+			//    can yield the same (object_id, term_taxonomy_id) pair more than once,
+			//    which would violate the wp_term_relationships primary key.
 			$lines[] = "INSERT INTO `{$wpdb->term_relationships}` (object_id, term_taxonomy_id, term_order)";
-			$lines[] = "SELECT p.ID, tt.term_taxonomy_id, 0";
+			$lines[] = "SELECT DISTINCT p.ID, tt.term_taxonomy_id, 0";
 			$lines[] = "FROM {$from_all}";
 			$lines[] = "JOIN `{$wpdb->posts}` p ON p.legacy_table_name = '{$ltn}' AND " . $this->pt_cond() . " AND p.legacy_id = {$key}";
 			if ( '' !== $term_join ) {

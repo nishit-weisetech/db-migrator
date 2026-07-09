@@ -29,6 +29,8 @@ class DBMig_Ajax {
 			'media_scan',
 			'media_generate',
 			'import_profiles',
+			'normalize_preview',
+			'normalize_run',
 		);
 		foreach ( $actions as $a ) {
 			add_action( 'wp_ajax_dbmig_' . $a, array( $this, $a ) );
@@ -222,6 +224,63 @@ class DBMig_Ajax {
 					$added,
 					$updated
 				),
+			)
+		);
+	}
+
+	/**
+	 * Normalize tool — read-only preview: distinct-name / linkable-row counts,
+	 * existence flags, plus the exact SQL that "Run" would execute.
+	 */
+	public function normalize_preview() {
+		$this->guard();
+		$ext  = new DBMig_External_DB();
+		$test = $ext->test();
+		$this->maybe_error( $test );
+
+		$o = DBMig_Normalizer::sanitize( wp_unslash( $_POST ) );
+		$this->maybe_error( $o );
+
+		$preview = DBMig_Normalizer::preview( $ext, $o );
+		$stmts   = DBMig_Normalizer::statements( $ext, $o );
+		wp_send_json_success(
+			array(
+				'preview' => $preview,
+				'sql'     => DBMig_Normalizer::to_text( $stmts, $o ),
+				'labels'  => wp_list_pluck( $stmts, 'label' ),
+			)
+		);
+	}
+
+	/**
+	 * Normalize tool — WRITES to the source DB: create lookup table, insert
+	 * distinct names, add + populate the id column.
+	 */
+	public function normalize_run() {
+		$this->guard();
+		@set_time_limit( 0 );
+
+		$ext  = new DBMig_External_DB();
+		$test = $ext->test();
+		$this->maybe_error( $test );
+
+		$o = DBMig_Normalizer::sanitize( wp_unslash( $_POST ) );
+		$this->maybe_error( $o );
+
+		$results = DBMig_Normalizer::run( $ext, $o );
+		if ( is_wp_error( $results ) ) {
+			$data = $results->get_error_data();
+			wp_send_json_error(
+				array(
+					'message' => $results->get_error_message(),
+					'results' => is_array( $data ) && isset( $data['results'] ) ? $data['results'] : array(),
+				)
+			);
+		}
+		wp_send_json_success(
+			array(
+				'results' => $results,
+				'preview' => DBMig_Normalizer::preview( $ext, $o ),
 			)
 		);
 	}

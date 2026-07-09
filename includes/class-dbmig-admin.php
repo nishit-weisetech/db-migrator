@@ -8,9 +8,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class DBMig_Admin {
 
-	const MENU_SLUG     = 'db-migrator';
-	const SETTINGS_SLUG = 'db-migrator-settings';
-	const GUIDE_SLUG    = 'db-migrator-guide';
+	const MENU_SLUG      = 'db-migrator';
+	const SETTINGS_SLUG  = 'db-migrator-settings';
+	const NORMALIZE_SLUG = 'db-migrator-normalize';
+	const GUIDE_SLUG     = 'db-migrator-guide';
 
 	public function hooks() {
 		add_action( 'admin_menu', array( $this, 'menu' ) );
@@ -53,6 +54,14 @@ class DBMig_Admin {
 		);
 		add_submenu_page(
 			self::MENU_SLUG,
+			__( 'Users from names', 'db-migrator' ),
+			__( 'Users from names', 'db-migrator' ),
+			'manage_options',
+			self::NORMALIZE_SLUG,
+			array( $this, 'render_normalize' )
+		);
+		add_submenu_page(
+			self::MENU_SLUG,
 			__( 'Guide', 'db-migrator' ),
 			__( 'Guide', 'db-migrator' ),
 			'manage_options',
@@ -63,6 +72,14 @@ class DBMig_Admin {
 
 	public function render_guide() {
 		include DBMIG_DIR . 'includes/views/guide.php';
+	}
+
+	public function render_normalize() {
+		$ext          = new DBMig_External_DB();
+		$connected    = $ext->is_configured();
+		$settings_url = admin_url( 'admin.php?page=' . self::SETTINGS_SLUG );
+		$this->notice();
+		include DBMIG_DIR . 'includes/views/normalize.php';
 	}
 
 	public function assets( $hook ) {

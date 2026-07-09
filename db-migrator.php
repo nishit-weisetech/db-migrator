@@ -25,6 +25,7 @@ require_once DBMIG_DIR . 'includes/class-dbmig-media.php';
 require_once DBMIG_DIR . 'includes/class-dbmig-profiles.php';
 require_once DBMIG_DIR . 'includes/class-dbmig-importer.php';
 require_once DBMIG_DIR . 'includes/class-dbmig-sql-builder.php';
+require_once DBMIG_DIR . 'includes/class-dbmig-normalizer.php';
 require_once DBMIG_DIR . 'includes/class-dbmig-exporter.php';
 require_once DBMIG_DIR . 'includes/class-dbmig-ajax.php';
 require_once DBMIG_DIR . 'includes/class-dbmig-admin.php';

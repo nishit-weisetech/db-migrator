@@ -222,6 +222,81 @@ class DBMig_External_DB {
 		return $t ? "`{$t}`" : false;
 	}
 
+	/**
+	 * Run a write / DDL statement (INSERT, UPDATE, CREATE, ALTER, …) against the
+	 * source DB. Returns affected-row count (int) / true, or WP_Error on failure.
+	 * NOTE: unlike the rest of this class, this WRITES to the source database — the
+	 * caller (the normalize tool) needs CREATE / ALTER / INSERT / UPDATE privileges.
+	 *
+	 * @return int|bool|WP_Error
+	 */
+	public function exec( $sql ) {
+		$db = $this->db();
+		if ( is_wp_error( $db ) ) {
+			return $db;
+		}
+		$res = $db->query( $sql );
+		if ( false === $res && ! empty( $db->last_error ) ) {
+			return new WP_Error( 'dbmig_exec_failed', $db->last_error );
+		}
+		return $res;
+	}
+
+	/**
+	 * Single scalar value from a read query. Returns null on error.
+	 */
+	public function scalar( $sql ) {
+		$db = $this->db();
+		if ( is_wp_error( $db ) ) {
+			return null;
+		}
+		return $db->get_var( $sql );
+	}
+
+	public function table_exists( $table ) {
+		$t = $this->safe_identifier( $table );
+		if ( ! $t ) {
+			return false;
+		}
+		$db = $this->db();
+		if ( is_wp_error( $db ) ) {
+			return false;
+		}
+		return (bool) $db->get_var( "SHOW TABLES LIKE '{$t}'" );
+	}
+
+	public function column_exists( $table, $column ) {
+		$qt = $this->qualify_table( $table );
+		$c  = $this->safe_identifier( $column );
+		if ( ! $qt || ! $c ) {
+			return false;
+		}
+		$db = $this->db();
+		if ( is_wp_error( $db ) ) {
+			return false;
+		}
+		return (bool) $db->get_var( "SHOW COLUMNS FROM {$qt} LIKE '{$c}'" );
+	}
+
+	/**
+	 * The collation of a specific column (e.g. utf8mb4_unicode_ci), or '' for
+	 * non-text columns / on error. Used so a table we create to join against this
+	 * column can match its collation and avoid "illegal mix of collations".
+	 */
+	public function column_collation( $table, $column ) {
+		$qt = $this->qualify_table( $table );
+		$c  = $this->safe_identifier( $column );
+		if ( ! $qt || ! $c ) {
+			return '';
+		}
+		$db = $this->db();
+		if ( is_wp_error( $db ) ) {
+			return '';
+		}
+		$row = $db->get_row( "SHOW FULL COLUMNS FROM {$qt} LIKE '{$c}'", ARRAY_A );
+		return ( $row && ! empty( $row['Collation'] ) ) ? (string) $row['Collation'] : '';
+	}
+
 	public function get_database_name() {
 		return $this->config['dbname'];
 	}

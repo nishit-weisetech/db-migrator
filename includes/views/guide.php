@@ -23,7 +23,8 @@ $new_url      = admin_url( 'admin.php?page=' . DBMig_Admin::MENU_SLUG . '&action
 			<li><a href="#g-media">9. Media / images</a></li>
 			<li><a href="#g-comment">10. Migrating comments</a></li>
 			<li><a href="#g-run">11. Running a migration (3 ways)</a></li>
-			<li><a href="#g-tips">12. Key rules &amp; gotchas</a></li>
+			<li><a href="#g-normalize">12. Normalizing a name-only column (no ids)</a></li>
+			<li><a href="#g-tips">13. Key rules &amp; gotchas</a></li>
 		</ul>
 	</div>
 
@@ -31,6 +32,7 @@ $new_url      = admin_url( 'admin.php?page=' . DBMig_Admin::MENU_SLUG . '&action
 	<div class="dbmig-card dbmig-whatsnew">
 		<h2><?php esc_html_e( 'What’s new', 'db-migrator' ); ?></h2>
 		<ul class="dbmig-bullets">
+			<li><strong>Users from names (normalize).</strong> A new tool that turns a repeated name column with no id (e.g. an author name on every post) into a real users lookup table + id column in the legacy DB, so the normal id-based user migration and author linking work. Same name → one user. (<a href="#g-normalize">§12</a>)</li>
 			<li><strong>Taxonomy-terms migration type.</strong> A third “Migrate into” option: bring a whole category/tag table over — <em>name, slug, description, parent</em>, plus term meta and ACF term fields. (<a href="#g-tax">§6</a>)</li>
 			<li><strong>Join to the current WordPress DB.</strong> The table dropdowns now list your live <code>wp_posts</code> / <code>wp_users</code> / <code>wp_terms</code> alongside the source tables, so you can resolve against already-migrated content by legacy id. (<a href="#g-join">§5</a>)</li>
 			<li><strong>Extra join AND/OR conditions.</strong> A <em>+ condition</em> button on each join adds conditions like <code>AND wp_posts.post_type = …</code> so a current-DB join can’t collide across post types. (<a href="#g-join">§5</a>)</li>
@@ -270,8 +272,22 @@ WHERE image IS NOT NULL
 	</div>
 
 	<!-- 12 -->
+	<div class="dbmig-card" id="g-normalize">
+		<h2>12. Users from names — a name-only column (no ids)</h2>
+		<p>Sometimes the legacy data has <strong>no user table and no id</strong> — just an author <em>name</em> repeated on every post. There's nothing unique to migrate users by, and nothing for the post's author to resolve against. The <a href="<?php echo esc_url( admin_url( 'admin.php?page=' . DBMig_Admin::NORMALIZE_SLUG ) ); ?>"><strong>Users from names</strong></a> tool (<strong>DB Migrator → Users from names</strong>) fixes that by giving each distinct name a real id — <em>in the legacy database</em> — so the ordinary id-based flow takes over.</p>
+		<ol class="dbmig-steps-list">
+			<li><strong>Step 1 — Choose the name to normalize.</strong> Pick the <strong>source table</strong> and the <strong>name column</strong> (e.g. <code>posts.author_name</code>). Leave <em>Trim whitespace</em> ticked so stray spaces don't split a name into two.</li>
+			<li><strong>Step 2 — New table &amp; id column.</strong> Optionally rename the <strong>users lookup table</strong> (default <code>dbmig_authors</code>) and the <strong>new id column</strong> added to the source table (default <code>author_id</code>).</li>
+			<li><strong>Step 3 — Preview &amp; run.</strong> <strong>Preview &amp; generate SQL</strong> shows how many distinct names and rows will be affected, plus the exact SQL; that unlocks the <strong>Run against legacy DB</strong> button. Changing any field above re-locks Run until you preview again.</li>
+		</ol>
+		<p>It runs four idempotent statements against the legacy DB: create a lookup table with an auto-increment <code>id</code> and a <strong>UNIQUE</strong> <code>name</code>; insert the <code>DISTINCT</code> names (so the <em>same name yields exactly one id</em>, case-insensitive under the column's collation); add the id column; and fill it by matching each row's name. Whitespace is trimmed and blank/NULL names are skipped.</p>
+		<p class="dbmig-warn"><strong>Needs write access:</strong> unlike the rest of the plugin (which only reads the legacy DB), this <em>writes</em> to it — the connection user needs <code>CREATE</code>, <code>ALTER</code>, <code>INSERT</code> and <code>UPDATE</code>. A read-only server user will fail; run it where you have those rights (typically local). Safe to re-run.</p>
+		<p><strong>Then migrate normally:</strong> a <a href="#g-user">User migration</a> from the new lookup table (id column = <code>id</code>, Display name = <code>name</code>), and in the post migration map <strong>Author</strong> to the new id column with <a href="#g-author">“Resolve from migrated user table”</a> pointing at the lookup table.</p>
+	</div>
+
+	<!-- 13 -->
 	<div class="dbmig-card" id="g-tips">
-		<h2>12. Key rules &amp; gotchas</h2>
+		<h2>13. Key rules &amp; gotchas</h2>
 		<ul class="dbmig-bullets">
 			<li><strong>Blank = skip.</strong> Any field row with no source column is left untouched.</li>
 			<li><strong>Re-runs are safe.</strong> Everything matches by the legacy link, so re-running updates instead of duplicating.</li>

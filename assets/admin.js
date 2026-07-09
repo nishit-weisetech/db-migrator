@@ -1569,9 +1569,153 @@
 		} );
 	}
 
+	/* ------------------------------------------------------------------ *
+	 *  Normalize-source tool page
+	 * ------------------------------------------------------------------ */
+	function bindNormalizer() {
+		var $wrap = $( '#dbmig-normalize' );
+		if ( ! $wrap.length ) {
+			return;
+		}
+		var columnsByTable = {};
+
+		// Make a select searchable (Select2), re-applying cleanly when its options
+		// are rebuilt. This page is outside the editor's MutationObserver scope.
+		function searchify( $sel ) {
+			if ( ! $.fn.select2 ) { return; }
+			if ( $sel.hasClass( 'select2-hidden-accessible' ) ) { $sel.select2( 'destroy' ); }
+			$sel.select2( { width: '320px', dropdownAutoWidth: false } );
+		}
+
+		function loadTables() {
+			$( '#dbmig-nz-conn-err' ).text( '' );
+			Ajax.post( 'get_tables' ).done( function ( r ) {
+				if ( ! r.success ) { return; }
+				var cur = $( '#dbmig-nz-table' ).val();
+				var html = '<option value="">— select table —</option>';
+				( r.data.tables || [] ).forEach( function ( t ) {
+					html += '<option value="' + t + '">' + t + '</option>';
+				} );
+				$( '#dbmig-nz-table' ).html( html ).val( cur );
+				searchify( $( '#dbmig-nz-table' ) );
+				if ( r.data.source_error ) {
+					$( '#dbmig-nz-conn-err' ).text( r.data.source_error );
+				}
+			} );
+		}
+
+		function fillCols( cols ) {
+			var html = '<option value="">— select column —</option>';
+			cols.forEach( function ( c ) {
+				html += '<option value="' + c.name + '">' + c.name + ' (' + c.type + ')</option>';
+			} );
+			$( '#dbmig-nz-col' ).html( html );
+			searchify( $( '#dbmig-nz-col' ) );
+		}
+
+		function loadColumns( t ) {
+			if ( ! t ) { fillCols( [] ); return; }
+			if ( columnsByTable[ t ] ) { fillCols( columnsByTable[ t ] ); return; }
+			Ajax.post( 'get_columns', { table: t } ).done( function ( r ) {
+				var cols = r.success ? ( r.data.columns || [] ) : [];
+				columnsByTable[ t ] = cols;
+				fillCols( cols );
+			} );
+		}
+
+		function opts() {
+			return {
+				source_table: $( '#dbmig-nz-table' ).val(),
+				name_col: $( '#dbmig-nz-col' ).val(),
+				target_table: $( '#dbmig-nz-target' ).val(),
+				fk_col: $( '#dbmig-nz-fk' ).val(),
+				trim: $( '#dbmig-nz-trim' ).is( ':checked' ) ? 1 : 0
+			};
+		}
+
+		function renderSummary( p ) {
+			var items = [
+				'<strong>' + p.distinct_names + '</strong> distinct name(s) → that many users will be created',
+				'<strong>' + p.linkable_rows + '</strong> source row(s) will be linked to an id',
+				'Lookup table ' + ( p.target_exists ? 'already exists — new names will be appended' : 'will be created' ),
+				'Id column ' + ( p.fk_exists ? 'already exists — it will be (re)filled' : 'will be added' )
+			];
+			$( '#dbmig-nz-summary' ).html( '<li>' + items.join( '</li><li>' ) + '</li>' );
+		}
+
+		// Changing any input invalidates a prior preview — disable Run until the
+		// user previews again (mirrors how editing a migration re-requires Save).
+		function invalidate() {
+			$( '#dbmig-nz-run' ).prop( 'disabled', true );
+			$( '#dbmig-nz-plan-wrap' ).hide();
+			$( '#dbmig-nz-result' ).removeClass( 'ok err' ).text( '' );
+		}
+
+		$( '#dbmig-nz-table' ).on( 'change', function () { loadColumns( $( this ).val() ); invalidate(); } );
+		$( '#dbmig-nz-col, #dbmig-nz-trim' ).on( 'change', invalidate );
+		$( '#dbmig-nz-target, #dbmig-nz-fk' ).on( 'input', invalidate );
+		$( '#dbmig-nz-reload' ).on( 'click', loadTables );
+		$( '#dbmig-nz-toggle-sql' ).on( 'click', function ( e ) { e.preventDefault(); $( '#dbmig-nz-sql' ).toggle(); } );
+
+		$( '#dbmig-nz-preview' ).on( 'click', function () {
+			var o = opts();
+			var $res = $( '#dbmig-nz-result' ).removeClass( 'ok err' );
+			if ( ! o.source_table || ! o.name_col ) {
+				$res.addClass( 'err' ).text( 'Pick a source table and a name column first.' );
+				return;
+			}
+			$res.text( 'Checking…' );
+			Ajax.post( 'normalize_preview', o ).done( function ( r ) {
+				if ( ! r.success ) {
+					$res.addClass( 'err' ).text( r.data.message );
+					return;
+				}
+				$res.addClass( 'ok' ).text( 'Ready — review below, then Run.' );
+				renderSummary( r.data.preview );
+				$( '#dbmig-nz-sql' ).val( r.data.sql );
+				$( '#dbmig-nz-run-log' ).empty();
+				$( '#dbmig-nz-next' ).hide();
+				$( '#dbmig-nz-run-result' ).removeClass( 'ok err' ).text( '' );
+				$( '#dbmig-nz-plan-wrap' ).show();
+				$( '#dbmig-nz-run' ).prop( 'disabled', false );
+			} ).fail( function () {
+				$res.addClass( 'err' ).text( 'Request failed.' );
+			} );
+		} );
+
+		$( '#dbmig-nz-run' ).on( 'click', function () {
+			var o = opts();
+			if ( ! window.confirm( 'This will CREATE/ALTER/UPDATE tables in the legacy database. Continue?' ) ) {
+				return;
+			}
+			var $res = $( '#dbmig-nz-run-result' ).removeClass( 'ok err' ).text( 'Running…' );
+			$( '#dbmig-nz-run' ).prop( 'disabled', true );
+			Ajax.post( 'normalize_run', o ).done( function ( r ) {
+				var log = ( r.data && r.data.results ) || [];
+				$( '#dbmig-nz-run-log' ).html( log.length ? '<li>' + log.map( function ( x ) {
+					return x.label + ' — ' + x.rows + ' row(s)';
+				} ).join( '</li><li>' ) + '</li>' : '' );
+				if ( ! r.success ) {
+					$res.addClass( 'err' ).text( r.data.message );
+					return;
+				}
+				$res.addClass( 'ok' ).text( 'Done.' );
+				renderSummary( r.data.preview );
+				$( '#dbmig-nz-next' ).show();
+			} ).fail( function () {
+				$res.addClass( 'err' ).text( 'Request failed.' );
+			} ).always( function () {
+				$( '#dbmig-nz-run' ).prop( 'disabled', false );
+			} );
+		} );
+
+		loadTables();
+	}
+
 	$( function () {
 		bindSettings();
 		bindListTools();
+		bindNormalizer();
 		Editor.init();
 	} );
 
