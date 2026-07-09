@@ -92,6 +92,9 @@ class DBMig_Profiles {
 			wp_die( esc_html__( 'Invalid or expired link.', 'db-migrator' ), 403 );
 		}
 		$profiles = self::all();
+		if ( empty( $profiles ) ) {
+			wp_die( esc_html__( 'There are no migrations to export yet.', 'db-migrator' ), 400 );
+		}
 
 		// Optional selection: ?ids=a,b,c exports only those profiles.
 		$ids = isset( $_GET['ids'] ) ? sanitize_text_field( wp_unslash( $_GET['ids'] ) ) : '';
