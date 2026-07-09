@@ -72,6 +72,13 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 					<p class="description"><?php esc_html_e( 'On insert, give each row the same ID it had in the source (post ID / term_id / user ID / comment ID) instead of a new auto-increment one. Only affects newly created rows — existing ones are matched and updated by legacy id as usual. Make sure those IDs are free in WordPress; a collision with an existing ID will error. Applies on the "Run SQL (fast)" path.', 'db-migrator' ); ?></p>
 				</td>
 			</tr>
+			<tr class="dbmig-when-hasslug">
+				<th scope="row"><?php esc_html_e( 'Auto slug from title', 'db-migrator' ); ?></th>
+				<td>
+					<label><input type="checkbox" id="dbmig-auto-slug"> <strong><?php esc_html_e( 'Generate the slug from the title / name when no slug column is mapped', 'db-migrator' ); ?></strong></label>
+					<p class="description"><?php esc_html_e( 'For the "Run SQL (fast)" path. Posts derive the slug (post_name) from the title; users derive the nicename from the display name. A mapped slug always wins — the source only fills a blank one. (Taxonomy terms already generate a slug from the name automatically; the "Run import (PHP)" path also derives these itself.)', 'db-migrator' ); ?></p>
+				</td>
+			</tr>
 			<tr class="dbmig-when-post">
 				<th scope="row"><label for="dbmig-post-type"><?php esc_html_e( 'Post type', 'db-migrator' ); ?></label></th>
 				<td>

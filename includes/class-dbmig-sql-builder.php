@@ -124,6 +124,17 @@ class DBMig_SQL_Builder {
 			? $this->mime_type_expr( $fields, $guid_expr )
 			: $this->expr_or( $fields, 'post_mime_type', "''" );
 
+		// Slug (post_name): when "auto slug from title" is on and no slug column is
+		// mapped (or it's empty for a row), derive it from the title — WordPress does
+		// this itself on the PHP path, but a raw SQL insert would leave it blank.
+		$post_name_expr = $this->expr_or( $fields, 'post_name', "''" );
+		if ( ! empty( $this->profile['auto_slug'] ) && ! $is_attach ) {
+			$slug_from_title = $this->slugify_sql( $this->expr_or( $fields, 'post_title', "''" ) );
+			$post_name_expr  = isset( $fields['post_name'] )
+				? "IF({$fields['post_name']} IS NULL OR {$fields['post_name']} = '', {$slug_from_title}, {$fields['post_name']})"
+				: $slug_from_title;
+		}
+
 		/* ---- 1. UPDATE existing posts (matched by legacy key) ---- */
 		// COALESCE(expr, existing) so a NULL source / unmatched LEFT JOIN keeps the
 		// current value instead of nulling a NOT NULL column or wiping good data.
@@ -160,7 +171,7 @@ class DBMig_SQL_Builder {
 			'comment_status'        => "'closed'",
 			'ping_status'           => "'closed'",
 			'post_password'         => "''",
-			'post_name'             => $this->expr_or( $fields, 'post_name', "''" ),
+			'post_name'             => $post_name_expr,
 			'to_ping'               => "''",
 			'pinged'                => "''",
 			'post_modified'         => 'NOW()',
@@ -611,6 +622,17 @@ class DBMig_SQL_Builder {
 		$url_expr   = isset( $cols_map['user_url'] ) ? "COALESCE({$cols_map['user_url']}, '')" : "''";
 		$reg_expr   = isset( $cols_map['user_registered'] ) ? "COALESCE({$cols_map['user_registered']}, NOW())" : 'NOW()';
 
+		// "Auto slug from title" for users: derive user_nicename from the display name
+		// (or login) when no nicename column is mapped, or it's blank for a row.
+		if ( ! empty( $this->profile['auto_slug'] ) ) {
+			$nice_src  = isset( $cols_map['display_name'] ) ? $cols_map['display_name']
+				: ( isset( $cols_map['user_login'] ) ? $cols_map['user_login'] : "''" );
+			$nice_auto = $this->slugify_sql( $nice_src );
+			$nice_expr = isset( $cols_map['user_nicename'] )
+				? "IF({$cols_map['user_nicename']} IS NULL OR {$cols_map['user_nicename']} = '', {$nice_auto}, {$cols_map['user_nicename']})"
+				: $nice_auto;
+		}
+
 		// A user is "already migrated" when the legacy columns match.
 		$exists_sql = "EXISTS (SELECT 1 FROM `{$wpdb->users}` u2 WHERE u2.legacy_table_name = '{$ltn}' AND u2.legacy_id = {$key})";
 		// Join used to reach the WP user for a source row, via the indexed columns.
@@ -745,7 +767,7 @@ class DBMig_SQL_Builder {
 		// Mapped values are NULL-guarded so a NULL source can't violate NOT NULL.
 		$name_fallback = "CONCAT('{$ltn} #', {$key})";
 		$name_expr     = isset( $cols['name'] ) ? "COALESCE({$cols['name']}, {$name_fallback})" : $name_fallback;
-		$slug_auto     = "LOWER(TRIM(BOTH '-' FROM REPLACE(REPLACE(REPLACE(REPLACE({$name_expr},' ','-'),'--','-'),'/','-'),'.','')))";
+		$slug_auto     = $this->slugify_sql( $name_expr );
 		$slug_expr     = isset( $cols['slug'] )
 			? "IF({$cols['slug']} IS NULL OR {$cols['slug']} = '', {$slug_auto}, {$cols['slug']})"
 			: $slug_auto;
@@ -1475,6 +1497,61 @@ class DBMig_SQL_Builder {
 	 */
 	private function expr_or( $map, $key, $default ) {
 		return array_key_exists( $key, $map ) ? "COALESCE({$map[ $key ]}, {$default})" : $default;
+	}
+
+	/**
+	 * SQL expression that turns a text expression into a URL-safe slug, matching
+	 * how WordPress builds one: accented Latin letters are transliterated to ASCII
+	 * (é→e, ã→a, ç→c, ß→ss …), then everything is lower-cased, every run of
+	 * non-[a-z0-9] is collapsed to a single hyphen, and hyphens are trimmed. Without
+	 * the transliteration an accented slug like "…joão-marques…" is stored, which no
+	 * longer matches the slug WordPress derives when resolving the URL — a 404.
+	 *
+	 * Transliteration uses REGEXP_REPLACE (MySQL 8+) with \x{XXXX} code-point escapes
+	 * so the generated SQL stays pure ASCII: embedding the accented characters as
+	 * literals would trip wpdb's charset guard and the whole query would be rejected
+	 * on the "Run SQL (fast)" path.
+	 *
+	 * Used for the "auto slug from title" option and for taxonomy term slugs.
+	 */
+	private function slugify_sql( $expr ) {
+		// target ASCII => Unicode code points that fold to it (lower-case; LOWER()
+		// handles the upper-case forms first).
+		$groups = array(
+			'a'  => array( '00E0', '00E1', '00E2', '00E3', '00E4', '00E5', '0101', '0103', '0105' ),
+			'c'  => array( '00E7', '0107', '0109', '010B', '010D' ),
+			'd'  => array( '00F0', '010F', '0111' ),
+			'e'  => array( '00E8', '00E9', '00EA', '00EB', '0113', '0115', '0117', '0119', '011B' ),
+			'g'  => array( '011D', '011F', '0121', '0123' ),
+			'h'  => array( '0125', '0127' ),
+			'i'  => array( '00EC', '00ED', '00EE', '00EF', '0129', '012B', '012D', '012F', '0131' ),
+			'j'  => array( '0135' ),
+			'k'  => array( '0137' ),
+			'l'  => array( '013A', '013C', '013E', '0140', '0142' ),
+			'n'  => array( '00F1', '0144', '0146', '0148', '014B' ),
+			'o'  => array( '00F2', '00F3', '00F4', '00F5', '00F6', '00F8', '014D', '014F', '0151' ),
+			'r'  => array( '0155', '0157', '0159' ),
+			's'  => array( '015B', '015D', '015F', '0161', '0219' ),
+			't'  => array( '0163', '0165', '0167', '021B' ),
+			'u'  => array( '00F9', '00FA', '00FB', '00FC', '0169', '016B', '016D', '016F', '0171', '0173' ),
+			'w'  => array( '0175' ),
+			'y'  => array( '00FD', '00FF', '0177' ),
+			'z'  => array( '017A', '017C', '017E' ),
+			'ae' => array( '00E6' ),
+			'oe' => array( '0153' ),
+			'ss' => array( '00DF' ),
+			'th' => array( '00FE' ),
+		);
+
+		$out = "LOWER({$expr})";
+		foreach ( $groups as $to => $cps ) {
+			$class = '';
+			foreach ( $cps as $cp ) {
+				$class .= '\\\\x{' . $cp . '}';
+			}
+			$out = "REGEXP_REPLACE({$out}, '[{$class}]', '{$to}')";
+		}
+		return "TRIM(BOTH '-' FROM REGEXP_REPLACE({$out}, '[^0-9a-z]+', '-'))";
 	}
 
 	/**
