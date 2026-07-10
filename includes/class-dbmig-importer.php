@@ -94,6 +94,91 @@ class DBMig_Importer {
 	}
 
 	/**
+	 * Dry-run preview of the FIRST source row: resolve every mapped field and
+	 * show the raw source value and the value that would be written — without
+	 * touching WordPress. Lets the user sanity-check a mapping before running.
+	 *
+	 * @return array|WP_Error
+	 */
+	public function preview_first_row() {
+		if ( empty( $this->profile['source_table'] ) || empty( $this->profile['source_id_column'] ) ) {
+			return new WP_Error( 'dbmig_preview', __( 'Select a source table and its ID column first.', 'db-migrator' ) );
+		}
+		$rows = $this->ext->query( $this->build_select( 0, 1 ) );
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+		if ( empty( $rows ) ) {
+			return array( 'empty' => true );
+		}
+		$row  = $rows[0];
+		$type = $this->profile['migration_type'] ?? 'post';
+
+		$fields = array();
+		foreach ( $this->profile['fields'] as $f ) {
+			$kind   = $f['target_kind'];
+			$static = ( '__static__' === ( $f['source'] ?? '' ) );
+			$item   = array(
+				'kind'     => $kind,
+				'target'   => $f['target'],
+				'acf_name' => $f['acf_name'] ?? '',
+				'source'   => $static ? '(static value)' : ( $f['source'] ?? '' ),
+				'raw'      => '',
+				'resolved' => '',
+			);
+			if ( $static ) {
+				$item['raw'] = $f['static_value'] ?? '';
+			} else {
+				$col         = $this->strip_qualifier( $f['source'] ?? '' );
+				$item['raw'] = array_key_exists( $col, $row ) ? $row[ $col ] : null;
+			}
+
+			if ( 'taxonomy' === $kind ) {
+				$v                = $this->resolve_source_value( $row, $f, true );
+				$item['resolved'] = ( null === $v || '' === $v ) ? '(none)' : ( 'term(s): ' . $v );
+			} elseif ( 'acf_relation' === $kind ) {
+				$raw   = $this->resolve_source_value( $row, $f, true );
+				$match = ! empty( $f['rel_match'] ) ? $f['rel_match'] : 'legacy';
+				$ids   = array();
+				if ( null !== $raw && '' !== $raw && ! ( 'legacy' === $match && empty( $f['rel_table'] ) ) ) {
+					foreach ( array_filter( array_map( 'trim', explode( ',', (string) $raw ) ), 'strlen' ) as $v ) {
+						$wid = $this->resolve_related_post( $v, $f, $match );
+						if ( $wid ) {
+							$ids[] = $wid;
+						}
+					}
+				}
+				$item['resolved'] = empty( $ids ) ? '(no match yet)' : ( 'WP post id(s): ' . implode( ', ', $ids ) );
+			} elseif ( 'media' === $kind ) {
+				$item['resolved'] = ( '' === (string) $item['raw'] ) ? '(none)' : ( 'attachment from "' . basename( (string) $item['raw'] ) . '" → ' . ( $f['attach_as'] ?: 'attachment' ) );
+			} else {
+				$r                = $this->resolve_source_value( $row, $f );
+				$item['resolved'] = is_array( $r ) ? wp_json_encode( $r ) : $r;
+			}
+			$fields[] = $item;
+		}
+
+		$repeaters = array();
+		foreach ( $this->profile['repeaters'] as $rep ) {
+			$sql   = $this->repeater_child_sql( $row, $rep );
+			$crows = ( '' !== $sql ) ? $this->ext->query( $sql ) : array();
+			$value = ( is_wp_error( $crows ) || ! is_array( $crows ) ) ? array() : $this->repeater_build_value( $crows, $rep );
+			$repeaters[] = array(
+				'field' => $rep['acf_name'] ? $rep['acf_name'] : $rep['acf_field'],
+				'count' => count( $value ),
+				'rows'  => array_slice( $value, 0, 10 ),
+			);
+		}
+
+		return array(
+			'type'      => $type,
+			'row'       => $row,
+			'fields'    => $fields,
+			'repeaters' => $repeaters,
+		);
+	}
+
+	/**
 	 * Import a single source row.
 	 *
 	 * @return string created|updated|skipped
@@ -835,12 +920,13 @@ class DBMig_Importer {
 	 *
 	 * @param int|string $object_id Post ID, or "user_{ID}" for a user repeater.
 	 */
-	private function apply_repeater( $object_id, $row, $rep ) {
+	// Build the SQL that fetches a repeater's child rows for one parent row.
+	// Returns '' when it can't be built. Shared by apply_repeater() and preview.
+	private function repeater_child_sql( $row, $rep ) {
 		$child_table = $this->ext->safe_identifier( $rep['child_table'] );
 		$child_fk    = $this->ext->safe_identifier( $rep['child_fk'] );
 		if ( ! $child_table || ! $child_fk ) {
-			$this->log( 'Repeater has an invalid child table / fk.' );
-			return;
+			return '';
 		}
 		$base_tbl = $this->ext->safe_identifier( $this->profile['source_table'] );
 		$vias     = ( ! empty( $rep['joins'] ) && is_array( $rep['joins'] ) ) ? $rep['joins'] : array();
@@ -867,7 +953,7 @@ class DBMig_Importer {
 			$parent_col = $rep['parent_col'] ? $this->strip_qualifier( $rep['parent_col'] ) : $this->profile['source_id_column'];
 			$parent_val = array_key_exists( $parent_col, $row ) ? $row[ $parent_col ] : null;
 			if ( null === $parent_val ) {
-				return;
+				return '';
 			}
 			$sql = "SELECT * FROM `{$child_table}` WHERE `{$child_fk}` = '" . esc_sql( $parent_val ) . "'" . $order;
 		} else {
@@ -883,7 +969,7 @@ class DBMig_Importer {
 			} else {
 				$bv = array_key_exists( $this->strip_qualifier( $pcol ), $row ) ? $row[ $this->strip_qualifier( $pcol ) ] : null;
 				if ( null === $bv ) {
-					return;
+					return '';
 				}
 				$where[] = "`{$child_table}`.`{$child_fk}` = '" . esc_sql( $bv ) . "'";
 			}
@@ -898,7 +984,7 @@ class DBMig_Importer {
 					$oc       = $is_l ? $rc : $lc;
 					$bv       = array_key_exists( $base_col, $row ) ? $row[ $base_col ] : null;
 					if ( null === $bv ) {
-						return;
+						return '';
 					}
 					if ( $ot !== $base_tbl ) {
 						$tables[ $ot ] = true;
@@ -937,11 +1023,11 @@ class DBMig_Importer {
 			$sql = "SELECT `{$child_table}`.* FROM {$from} WHERE " . implode( ' AND ', $where ) . $order;
 		}
 
-		$child_rows = $this->ext->query( $sql );
-		if ( is_wp_error( $child_rows ) || empty( $child_rows ) ) {
-			return;
-		}
+		return $sql;
+	}
 
+	/** Turn a repeater's child rows into the ACF value array (rows keyed by sub-field name). */
+	private function repeater_build_value( $child_rows, $rep ) {
 		$repeater_value = array();
 		foreach ( $child_rows as $crow ) {
 			$rowval = array();
@@ -955,15 +1041,31 @@ class DBMig_Importer {
 					$val = DBMig_Schema::find_post_by_legacy( $sub['rel_table'], $val );
 				}
 
-				// ACF repeater rows must be keyed by the sub-field NAME (not its key)
-				// so update_field() writes the correct skills_0_<name> meta.
+				// ACF repeater rows must be keyed by the sub-field NAME (not its key).
 				$selector            = $sub['sub_name'] ? $sub['sub_name'] : $sub['sub_field'];
 				$rowval[ $selector ] = $val;
 			}
 			$repeater_value[] = $rowval;
 		}
+		return $repeater_value;
+	}
 
-		$selector = $rep['acf_field'] ? $rep['acf_field'] : $rep['acf_name'];
+	/**
+	 * Build ACF repeater rows from a child table and write them in one go.
+	 *
+	 * @param int|string $object_id Post ID, or "user_{ID}" / "term_{ID}" / "comment_{ID}".
+	 */
+	private function apply_repeater( $object_id, $row, $rep ) {
+		$sql = $this->repeater_child_sql( $row, $rep );
+		if ( '' === $sql ) {
+			return;
+		}
+		$child_rows = $this->ext->query( $sql );
+		if ( is_wp_error( $child_rows ) || empty( $child_rows ) ) {
+			return;
+		}
+		$repeater_value = $this->repeater_build_value( $child_rows, $rep );
+		$selector       = $rep['acf_field'] ? $rep['acf_field'] : $rep['acf_name'];
 		DBMig_ACF::update_value( $selector, $repeater_value, $object_id );
 	}
 
@@ -1063,9 +1165,48 @@ class DBMig_Importer {
 		return $i !== false ? substr( $value, $i + 1 ) : $value;
 	}
 
+	/**
+	 * Base source reference for the FROM clause. When the profile carries a row
+	 * filter (WHERE / ORDER BY / LIMIT / OFFSET) the source table is wrapped in a
+	 * derived table so the batch loop, the row count and the preview all operate
+	 * on the exact same filtered/sliced set of rows. Mirrors the SQL builder.
+	 */
+	private function source_base_ref() {
+		$bqt    = $this->ext->qualify_table( $this->profile['source_table'] );
+		$where  = trim( (string) ( $this->profile['where_sql'] ?? '' ) );
+		$limit  = (int) ( $this->profile['row_limit'] ?? 0 );
+		$offset = (int) ( $this->profile['row_offset'] ?? 0 );
+
+		if ( '' === $where && $limit <= 0 && $offset <= 0 ) {
+			return $bqt;
+		}
+
+		$sub = "SELECT * FROM {$bqt}";
+		if ( '' !== $where ) {
+			$sub .= " WHERE {$where}";
+		}
+		if ( $limit > 0 || $offset > 0 ) {
+			// Stable ORDER so the batch loop re-materialises the same slice.
+			$ob = trim( (string) ( $this->profile['order_by'] ?? '' ) );
+			if ( '' === $ob ) {
+				$ob = (string) ( $this->profile['source_id_column'] ?? '' );
+			}
+			if ( '' !== $ob ) {
+				$dir  = ( 'DESC' === ( $this->profile['order_dir'] ?? 'ASC' ) ) ? 'DESC' : 'ASC';
+				$sub .= ' ORDER BY `' . $this->ext->safe_identifier( $ob ) . "` {$dir}";
+			}
+			$lim  = $limit > 0 ? $limit : '18446744073709551615';
+			$sub .= " LIMIT {$lim}";
+			if ( $offset > 0 ) {
+				$sub .= " OFFSET {$offset}";
+			}
+		}
+		return "({$sub})";
+	}
+
 	private function build_from() {
 		$balias = $this->ext->safe_identifier( $this->table_alias( $this->profile['source_table'] ) );
-		$bqt    = $this->ext->qualify_table( $this->profile['source_table'] );
+		$bqt    = $this->source_base_ref();
 		$from   = "FROM {$bqt} AS `{$balias}`";
 
 		foreach ( $this->profile['joins'] as $j ) {

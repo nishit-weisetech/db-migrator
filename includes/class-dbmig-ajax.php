@@ -20,6 +20,7 @@ class DBMig_Ajax {
 			'save_profile',
 			'delete_profile',
 			'count',
+			'preview',
 			'run_batch',
 			'generate_sql',
 			'list_sql',
@@ -303,6 +304,27 @@ class DBMig_Ajax {
 		$total = $imp->total();
 		$this->maybe_error( $total );
 		wp_send_json_success( array( 'total' => (int) $total ) );
+	}
+
+	/**
+	 * Dry-run preview of the first source row (no writes). Accepts the (possibly
+	 * unsaved) profile from the editor so the user can preview while mapping.
+	 */
+	public function preview() {
+		$this->guard();
+		$raw = isset( $_POST['profile'] ) ? wp_unslash( $_POST['profile'] ) : array();
+		if ( is_string( $raw ) ) {
+			$raw = json_decode( $raw, true );
+		}
+		if ( ! is_array( $raw ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid profile payload.', 'db-migrator' ) ) );
+		}
+		$profile = DBMig_Profiles::sanitize( $raw );
+		$result  = ( new DBMig_Importer( $profile ) )->preview_first_row();
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+		wp_send_json_success( $result );
 	}
 
 	public function run_batch() {

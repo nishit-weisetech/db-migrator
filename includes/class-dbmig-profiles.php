@@ -150,6 +150,11 @@ class DBMig_Profiles {
 			'auto_slug'        => ! empty( $raw['auto_slug'] ) ? 1 : 0,
 			'source_table'     => isset( $raw['source_table'] ) ? sanitize_text_field( $raw['source_table'] ) : '',
 			'source_id_column' => isset( $raw['source_id_column'] ) ? sanitize_text_field( $raw['source_id_column'] ) : '',
+			'where_sql'        => isset( $raw['where_sql'] ) ? self::clean_where( $raw['where_sql'] ) : '',
+			'order_by'         => isset( $raw['order_by'] ) ? sanitize_text_field( $raw['order_by'] ) : '',
+			'order_dir'        => ( isset( $raw['order_dir'] ) && 'DESC' === strtoupper( (string) $raw['order_dir'] ) ) ? 'DESC' : 'ASC',
+			'row_limit'        => isset( $raw['row_limit'] ) ? max( 0, (int) $raw['row_limit'] ) : 0,
+			'row_offset'       => isset( $raw['row_offset'] ) ? max( 0, (int) $raw['row_offset'] ) : 0,
 			'joins'            => array(),
 			'fields'           => array(),
 			'repeaters'        => array(),
@@ -269,5 +274,23 @@ class DBMig_Profiles {
 		}
 
 		return $profile;
+	}
+
+	/**
+	 * Sanitise a user-supplied WHERE expression.
+	 *
+	 * The value is a raw boolean expression that gets spliced into the source
+	 * SELECT ( `WHERE <expr>` ). This is an admin-only, manage_options field and
+	 * the admin runs the resulting SQL against their own DB, but we still strip
+	 * statement terminators and comment markers so the fragment can only ever be
+	 * a single filter expression and can't smuggle in a second statement.
+	 */
+	private static function clean_where( $w ) {
+		$w = (string) wp_unslash( $w );
+		$w = str_replace( ';', ' ', $w );          // no statement terminators
+		$w = preg_replace( '/--[^\r\n]*/', '', $w ); // strip -- line comments
+		$w = preg_replace( '/#[^\r\n]*/', '', $w );  // strip # line comments
+		$w = preg_replace( '!/\*.*?\*/!s', '', $w ); // strip /* */ block comments
+		return trim( $w );
 	}
 }

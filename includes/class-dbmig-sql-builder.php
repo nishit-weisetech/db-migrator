@@ -368,7 +368,7 @@ class DBMig_SQL_Builder {
 			// 3) If not append: clear this profile's existing terms in this taxonomy.
 			if ( empty( $f['term_append'] ) ) {
 				$lines[] = "DELETE r FROM `{$wpdb->term_relationships}` r";
-				$lines[] = "  JOIN `{$wpdb->posts}` p ON p.ID = r.object_id AND p.legacy_table_name = '{$ltn}' AND " . $this->pt_cond();
+				$lines[] = "  JOIN `{$wpdb->posts}` p ON p.ID = r.object_id AND p.legacy_table_name = '{$ltn}' AND " . $this->pt_cond() . $this->slice_scope( 'p.legacy_id' );
 				$lines[] = "  JOIN `{$wpdb->term_taxonomy}` tt ON tt.term_taxonomy_id = r.term_taxonomy_id AND tt.taxonomy = '{$tax}';";
 			}
 
@@ -479,7 +479,7 @@ class DBMig_SQL_Builder {
 		$out[] = "-- meta: {$meta_key}";
 		$out[] = "DELETE pm FROM `{$wpdb->postmeta}` pm";
 		$out[] = "  JOIN `{$wpdb->posts}` p ON p.ID = pm.post_id";
-		$out[] = "  WHERE pm.meta_key = '{$meta_key}' AND p.legacy_table_name = '{$ltn}' AND {$pt};";
+		$out[] = "  WHERE pm.meta_key = '{$meta_key}' AND p.legacy_table_name = '{$ltn}' AND {$pt}" . $this->slice_scope( 'p.legacy_id' ) . ';';
 		$out[] = "INSERT INTO `{$wpdb->postmeta}` (post_id, meta_key, meta_value)";
 		$out[] = "SELECT p.ID, '{$meta_key}', {$expr}";
 		$out[] = "FROM {$from}";
@@ -490,7 +490,7 @@ class DBMig_SQL_Builder {
 		if ( in_array( $mf['target_kind'], array( 'acf', 'acf_relation' ), true ) && ! empty( $mf['target'] ) ) {
 			$fk_key = '_' . $meta_key;
 			$fk_val = esc_sql( $mf['target'] );
-			$out[]  = "DELETE pm FROM `{$wpdb->postmeta}` pm JOIN `{$wpdb->posts}` p ON p.ID = pm.post_id WHERE pm.meta_key = '{$fk_key}' AND p.legacy_table_name = '{$ltn}' AND {$pt};";
+			$out[]  = "DELETE pm FROM `{$wpdb->postmeta}` pm JOIN `{$wpdb->posts}` p ON p.ID = pm.post_id WHERE pm.meta_key = '{$fk_key}' AND p.legacy_table_name = '{$ltn}' AND {$pt}" . $this->slice_scope( 'p.legacy_id' ) . ';';
 			$out[]  = "INSERT INTO `{$wpdb->postmeta}` (post_id, meta_key, meta_value) SELECT p.ID, '{$fk_key}', '{$fk_val}' FROM {$from} JOIN `{$wpdb->posts}` p ON p.legacy_table_name = '{$ltn}' AND {$pt} AND " . 'p.legacy_id = ' . $key . ';';
 		}
 		$out[] = '';
@@ -516,7 +516,7 @@ class DBMig_SQL_Builder {
 		$out[] = "-- relation (multi-value ACF): {$meta_key}";
 		$out[] = "DELETE pm FROM `{$wpdb->postmeta}` pm";
 		$out[] = "  JOIN `{$wpdb->posts}` p ON p.ID = pm.post_id";
-		$out[] = "  WHERE pm.meta_key = '{$meta_key}' AND p.legacy_table_name = '{$ltn}' AND {$pt};";
+		$out[] = "  WHERE pm.meta_key = '{$meta_key}' AND p.legacy_table_name = '{$ltn}' AND {$pt}" . $this->slice_scope( 'p.legacy_id' ) . ';';
 		// Aggregate all distinct resolved ids per post into one serialized array:
 		//   a:N:{i:0;s:len:"id";i:1;...}
 		$out[] = "INSERT INTO `{$wpdb->postmeta}` (post_id, meta_key, meta_value)";
@@ -539,7 +539,7 @@ class DBMig_SQL_Builder {
 		if ( ! empty( $mf['target'] ) ) {
 			$fk_key = '_' . $meta_key;
 			$fk_val = esc_sql( $mf['target'] );
-			$out[]  = "DELETE pm FROM `{$wpdb->postmeta}` pm JOIN `{$wpdb->posts}` p ON p.ID = pm.post_id WHERE pm.meta_key = '{$fk_key}' AND p.legacy_table_name = '{$ltn}' AND {$pt};";
+			$out[]  = "DELETE pm FROM `{$wpdb->postmeta}` pm JOIN `{$wpdb->posts}` p ON p.ID = pm.post_id WHERE pm.meta_key = '{$fk_key}' AND p.legacy_table_name = '{$ltn}' AND {$pt}" . $this->slice_scope( 'p.legacy_id' ) . ';';
 			$out[]  = "INSERT INTO `{$wpdb->postmeta}` (post_id, meta_key, meta_value) SELECT DISTINCT p.ID, '{$fk_key}', '{$fk_val}' FROM {$from_all} {$pjoin};";
 		}
 		$out[] = '';
@@ -716,7 +716,7 @@ class DBMig_SQL_Builder {
 		$out   = array();
 		$out[] = "-- user meta: {$meta_key}";
 		$out[] = "DELETE um FROM `{$wpdb->usermeta}` um";
-		$out[] = "  JOIN `{$wpdb->users}` u ON u.ID = um.user_id AND u.legacy_table_name = '{$ltn}'";
+		$out[] = "  JOIN `{$wpdb->users}` u ON u.ID = um.user_id AND u.legacy_table_name = '{$ltn}'" . $this->slice_scope( 'u.legacy_id' );
 		$out[] = "  WHERE um.meta_key = '{$meta_key}';";
 		$out[] = "INSERT INTO `{$wpdb->usermeta}` (user_id, meta_key, meta_value)";
 		$out[] = "SELECT u.ID, '{$meta_key}', {$expr}";
@@ -726,7 +726,7 @@ class DBMig_SQL_Builder {
 		if ( ! empty( $mf['field_key'] ) ) {
 			$fk_key = '_' . $meta_key;
 			$fk_val = esc_sql( $mf['field_key'] );
-			$out[]  = "DELETE um FROM `{$wpdb->usermeta}` um JOIN `{$wpdb->users}` u ON u.ID = um.user_id AND u.legacy_table_name = '{$ltn}' WHERE um.meta_key = '{$fk_key}';";
+			$out[]  = "DELETE um FROM `{$wpdb->usermeta}` um JOIN `{$wpdb->users}` u ON u.ID = um.user_id AND u.legacy_table_name = '{$ltn}'" . $this->slice_scope( 'u.legacy_id' ) . " WHERE um.meta_key = '{$fk_key}';";
 			$out[]  = "INSERT INTO `{$wpdb->usermeta}` (user_id, meta_key, meta_value) SELECT u.ID, '{$fk_key}', '{$fk_val}' FROM {$from} {$user_join};";
 		}
 		$out[] = '';
@@ -865,7 +865,7 @@ class DBMig_SQL_Builder {
 		$out   = array();
 		$out[] = "-- term meta: {$meta_key}";
 		$out[] = "DELETE tm FROM `{$wpdb->termmeta}` tm";
-		$out[] = "  JOIN `{$wpdb->terms}` t ON t.term_id = tm.term_id AND t.legacy_table_name = '{$ltn}'";
+		$out[] = "  JOIN `{$wpdb->terms}` t ON t.term_id = tm.term_id AND t.legacy_table_name = '{$ltn}'" . $this->slice_scope( 't.legacy_id' );
 		$out[] = "  WHERE tm.meta_key = '{$meta_key}';";
 		$out[] = "INSERT INTO `{$wpdb->termmeta}` (term_id, meta_key, meta_value)";
 		$out[] = "SELECT t.term_id, '{$meta_key}', {$expr}";
@@ -876,7 +876,7 @@ class DBMig_SQL_Builder {
 		if ( ! empty( $mf['field_key'] ) ) {
 			$fk_key = '_' . $meta_key;
 			$fk_val = esc_sql( $mf['field_key'] );
-			$out[]  = "DELETE tm FROM `{$wpdb->termmeta}` tm JOIN `{$wpdb->terms}` t ON t.term_id = tm.term_id AND t.legacy_table_name = '{$ltn}' WHERE tm.meta_key = '{$fk_key}';";
+			$out[]  = "DELETE tm FROM `{$wpdb->termmeta}` tm JOIN `{$wpdb->terms}` t ON t.term_id = tm.term_id AND t.legacy_table_name = '{$ltn}'" . $this->slice_scope( 't.legacy_id' ) . " WHERE tm.meta_key = '{$fk_key}';";
 			$out[]  = "INSERT INTO `{$wpdb->termmeta}` (term_id, meta_key, meta_value) SELECT t.term_id, '{$fk_key}', '{$fk_val}' FROM {$from} {$term_join};";
 		}
 		$out[] = '';
@@ -1033,7 +1033,7 @@ class DBMig_SQL_Builder {
 		$out   = array();
 		$out[] = "-- comment meta: {$meta_key}";
 		$out[] = "DELETE cm FROM `{$wpdb->commentmeta}` cm";
-		$out[] = "  JOIN `{$wpdb->comments}` c ON c.comment_ID = cm.comment_id AND c.legacy_table_name = '{$ltn}'";
+		$out[] = "  JOIN `{$wpdb->comments}` c ON c.comment_ID = cm.comment_id AND c.legacy_table_name = '{$ltn}'" . $this->slice_scope( 'c.legacy_id' );
 		$out[] = "  WHERE cm.meta_key = '{$meta_key}';";
 		$out[] = "INSERT INTO `{$wpdb->commentmeta}` (comment_id, meta_key, meta_value)";
 		$out[] = "SELECT c.comment_ID, '{$meta_key}', {$expr}";
@@ -1044,7 +1044,7 @@ class DBMig_SQL_Builder {
 		if ( ! empty( $mf['field_key'] ) ) {
 			$fk_key = '_' . $meta_key;
 			$fk_val = esc_sql( $mf['field_key'] );
-			$out[]  = "DELETE cm FROM `{$wpdb->commentmeta}` cm JOIN `{$wpdb->comments}` c ON c.comment_ID = cm.comment_id AND c.legacy_table_name = '{$ltn}' WHERE cm.meta_key = '{$fk_key}';";
+			$out[]  = "DELETE cm FROM `{$wpdb->commentmeta}` cm JOIN `{$wpdb->comments}` c ON c.comment_ID = cm.comment_id AND c.legacy_table_name = '{$ltn}'" . $this->slice_scope( 'c.legacy_id' ) . " WHERE cm.meta_key = '{$fk_key}';";
 			$out[]  = "INSERT INTO `{$wpdb->commentmeta}` (comment_id, meta_key, meta_value) SELECT c.comment_ID, '{$fk_key}', '{$fk_val}' FROM {$from} {$comment_jn};";
 		}
 		$out[] = '';
@@ -1162,7 +1162,7 @@ class DBMig_SQL_Builder {
 			$lines[] = "-- ===== ACF repeater: {$field}  (from {$rep['child_table']}) =====";
 
 			// 0) Clear existing repeater meta (count + field-key ref + every row).
-			$lines[] = "DELETE m FROM `{$mt}` m JOIN `{$ot}` o ON o.`{$oc}` = m.`{$fk}` AND {$obj_scope}";
+			$lines[] = "DELETE m FROM `{$mt}` m JOIN `{$ot}` o ON o.`{$oc}` = m.`{$fk}` AND {$obj_scope}" . $this->slice_scope( 'o.legacy_id' );
 			$lines[] = "  WHERE m.meta_key = '{$field}' OR m.meta_key = '_{$field}' OR m.meta_key LIKE '{$fesc}\\_%' OR m.meta_key LIKE '\\_{$fesc}\\_%';";
 
 			// 1) Row count + field-key reference.
@@ -1240,8 +1240,8 @@ class DBMig_SQL_Builder {
 	 *                        references (keeps the post SELECT one row per source id).
 	 */
 	private function source_from( $all_joins = false ) {
-		list( $bdb, $base ) = $this->parse_table( $this->profile['source_table'] );
-		$sql = "`{$bdb}`.`{$base}` AS `{$base}`";
+		list( , $base ) = $this->parse_table( $this->profile['source_table'] );
+		$sql = $this->source_base_ref() . " AS `{$base}`";
 
 		if ( $all_joins ) {
 			$joins = array();
@@ -1262,6 +1262,80 @@ class DBMig_SQL_Builder {
 			$sql  .= "\n  {$type} JOIN `{$jdb}`.`{$jt}` AS `{$jt}` ON {$left} = {$right}" . $this->join_extra_on( $j, $base );
 		}
 		return $sql;
+	}
+
+	/**
+	 * The base source reference for the FROM clause.
+	 *
+	 * When the profile carries a row filter (WHERE / ORDER BY / LIMIT / OFFSET)
+	 * we wrap the source table in a derived table so every generated statement
+	 * (post/user/term INSERT+UPDATE, each meta block, taxonomy assignment) sees
+	 * the exact same filtered, sliced set of source rows. Without a filter we
+	 * return the plain `db`.`table` so the source's own indexes are preserved.
+	 *
+	 * ORDER BY is only meaningful together with LIMIT/OFFSET (a set-based
+	 * INSERT ... SELECT ignores ordering otherwise), so it's emitted only then.
+	 */
+	private function source_base_ref() {
+		list( $bdb, $base ) = $this->parse_table( $this->profile['source_table'] );
+		$direct = "`{$bdb}`.`{$base}`";
+
+		$where  = trim( (string) ( $this->profile['where_sql'] ?? '' ) );
+		$limit  = (int) ( $this->profile['row_limit'] ?? 0 );
+		$offset = (int) ( $this->profile['row_offset'] ?? 0 );
+
+		if ( '' === $where && $limit <= 0 && $offset <= 0 ) {
+			return $direct;
+		}
+
+		$sub = "SELECT * FROM {$direct}";
+		if ( '' !== $where ) {
+			$sub .= " WHERE {$where}";
+		}
+		if ( $limit > 0 || $offset > 0 ) {
+			// A LIMIT needs a stable ORDER, otherwise each statement's derived
+			// table (post INSERT vs meta INSERT vs taxonomy) could materialise a
+			// different arbitrary slice. Fall back to the source id column.
+			$ob = trim( (string) ( $this->profile['order_by'] ?? '' ) );
+			if ( '' === $ob ) {
+				$ob = (string) ( $this->profile['source_id_column'] ?? '' );
+			}
+			if ( '' !== $ob ) {
+				$dir  = ( 'DESC' === ( $this->profile['order_dir'] ?? 'ASC' ) ) ? 'DESC' : 'ASC';
+				$sub .= ' ORDER BY `' . $this->id( $ob ) . "` {$dir}";
+			}
+			// OFFSET requires a LIMIT in MySQL; use the documented max when only an offset is set.
+			$lim  = $limit > 0 ? $limit : '18446744073709551615';
+			$sub .= " LIMIT {$lim}";
+			if ( $offset > 0 ) {
+				$sub .= " OFFSET {$offset}";
+			}
+		}
+		return "({$sub})";
+	}
+
+	/** Whether the profile restricts the source rows (WHERE / LIMIT / OFFSET). */
+	private function has_row_filter() {
+		return '' !== trim( (string) ( $this->profile['where_sql'] ?? '' ) )
+			|| (int) ( $this->profile['row_limit'] ?? 0 ) > 0
+			|| (int) ( $this->profile['row_offset'] ?? 0 ) > 0;
+	}
+
+	/**
+	 * A DELETE guard that limits an idempotent delete-then-insert to only the rows
+	 * in the current slice. Without it, a chunked run (e.g. LIMIT 1000 OFFSET 2000)
+	 * would wipe the meta/relationships written by an earlier slice, because the
+	 * INSERT only re-adds the current slice. Returns '' when no filter is active
+	 * (so the common, unfiltered path is byte-for-byte unchanged).
+	 *
+	 * @param string $legacy_id_ref  qualified legacy_id, e.g. 'p.legacy_id'
+	 */
+	private function slice_scope( $legacy_id_ref ) {
+		if ( ! $this->has_row_filter() ) {
+			return '';
+		}
+		$idc = $this->id( $this->profile['source_id_column'] );
+		return ' AND EXISTS (SELECT 1 FROM ' . $this->source_base_ref() . " AS `dbmig_slice` WHERE `dbmig_slice`.`{$idc}` = {$legacy_id_ref})";
 	}
 
 	/**

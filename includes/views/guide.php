@@ -43,6 +43,8 @@ $new_url      = admin_url( 'admin.php?page=' . DBMig_Admin::MENU_SLUG . '&action
 			<li><strong>Partial update.</strong> Re-run to fill in just one field you added later, updating only already-migrated rows and creating nothing. (<a href="#g-run">§10</a>)</li>
 			<li><strong>Users never get invented data.</strong> Skipped user fields keep WordPress’s defaults — no placeholder e-mails. (<a href="#g-user">§4</a>)</li>
 			<li><strong>Media-attachment migration type.</strong> Import a legacy media table as Media Library <code>attachment</code> posts (title, file URL, <code>_wp_attached_file</code>; MIME type auto-detected from the file URL); place the files manually and regenerate sizes. (<a href="#g-media">§9</a>)</li>
+			<li><strong>Preview 1st row.</strong> A dry run that shows how the first source row resolves into WordPress (each field's raw → written value, plus repeater rows) — no writes. Check a mapping before running. (<a href="#g-run">§11</a>)</li>
+			<li><strong>Row filter (WHERE / ORDER BY / LIMIT / OFFSET).</strong> Restrict, order and slice which source rows migrate — a raw <code>WHERE</code> to include only some rows, and a limit/offset to test on a handful or migrate in safe chunks. Chunked runs accumulate without wiping earlier slices. (<a href="#g-join">§5</a>)</li>
 			<li><strong>Export / import migrations.</strong> Build and test your migration profiles locally, then carry them to the production server. (<a href="#g-run">§11</a>)</li>
 			<li><strong>Comment migration type.</strong> Import a legacy comments table into <code>wp_comments</code> — attach to migrated posts, resolve threaded replies, recount automatically. (<a href="#g-comment">§10</a>)</li>
 		</ul>
@@ -120,6 +122,15 @@ $new_url      = admin_url( 'admin.php?page=' . DBMig_Admin::MENU_SLUG . '&action
 Join 2:  LEFT JOIN  category          ON  news_categories.cat_id = category.id</pre>
 		<p>Join 2's left column refers to the <em>first joined table</em>, not the base. Add joins <strong>top-to-bottom in dependency order</strong>.</p>
 		<p class="dbmig-warn"><strong>Important:</strong> a one-to-many join (a junction) produces several rows per source record. That is exactly what you want for <em>taxonomy</em> and <em>repeaters</em>, but such joins are <strong>only used by the taxonomy / repeater logic</strong> — the plugin never lets them create duplicate posts. Use joins for post fields only when the relation is one-to-one (e.g. a single author or source row).</p>
+
+		<h3 style="margin-top:1.4em">Row filter — which rows to migrate <span style="font-weight:normal">(optional)</span></h3>
+		<p>Below the joins is a <strong>“Row filter”</strong> panel that lets you restrict, order and slice the source rows before migrating. It applies everywhere — the generated SQL, the PHP <em>Run import</em>, the row <em>count</em> and the <em>Preview</em> all obey it.</p>
+		<table class="dbmig-guide-table">
+			<tr><th>WHERE condition</th><td>A raw boolean expression on the <strong>source table's own columns</strong> (no <code>WHERE</code> keyword), e.g. <code>status = 'published'</code> or <code>created_at &gt;= '2020-01-01'</code>. Leave blank for all rows. Semicolons and SQL comments are stripped, so it can only ever be a single filter — but it is otherwise raw SQL, so test it. It filters the <em>base</em> rows only (not joined tables).</td></tr>
+			<tr><th>Order by + ASC/DESC</th><td>Which column decides the order. This only matters together with a limit/offset (it picks <em>which</em> rows a slice takes). Defaults to the ID column so a slice stays stable across batches.</td></tr>
+			<tr><th>Limit / Offset</th><td><strong>Limit</strong> = the maximum number of rows to migrate (0 = no limit). <strong>Offset</strong> = how many rows to skip first. Together they migrate a range — e.g. <code>limit 1000 offset 2000</code> is rows 2001–3000.</td></tr>
+		</table>
+		<p>Two common uses: <strong>test</strong> a mapping on a handful of rows (<code>limit 10</code>) before committing, and <strong>migrate in chunks</strong> (run <code>offset 0</code>, then <code>offset 1000</code>, …) for a very large table. Chunked runs <strong>accumulate</strong> — a later slice never wipes the meta, terms or repeater rows written by an earlier one.</p>
 	</div>
 
 	<!-- 6 -->
@@ -262,6 +273,8 @@ WHERE image IS NOT NULL
 			<tr><th>Generate SQL file</th><td>Writes a <code>.sql</code> file (in the plugin's <code>exports/</code> folder) plus a ready-to-run <code>mysql</code> command, to run yourself in a terminal.</td></tr>
 		</table>
 		<p><strong>Typical big migration:</strong> <em>Run SQL (fast)</em> handles everything — posts, meta, taxonomy, authors, ACF repeaters and single relationships. Use <em>Run import (PHP)</em> only if you need real password hashes or want a row-by-row cross-check.</p>
+		<p><strong>👁 Preview 1st row</strong> (next to the run buttons) does a dry run against the <em>first</em> source row and shows, per mapped field, the <em>raw</em> source value and the value that would actually be written (after transforms, resolves, term lookups), plus how many rows each repeater would get. Nothing is written — use it to sanity-check a mapping before committing to a full run. Works on an unsaved profile too, so you can preview while you map.</p>
+
 		<h3 class="dbmig-subhead">Local → server (export / import)</h3>
 		<p>Build and test your migrations on local, then move them to the live server without redoing the mapping. On the <strong>Migrations</strong> list page:</p>
 		<ul class="dbmig-bullets">

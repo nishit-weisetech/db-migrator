@@ -272,6 +272,9 @@
 			$( '#dbmig-generate-sql' ).on( 'click', function () {
 				self.generateSql();
 			} );
+			$( '#dbmig-preview' ).on( 'click', function () {
+				self.previewRow();
+			} );
 
 			this.$root.on( 'click', '.dbmig-cmd-copy', function () {
 				var el = $( this ).closest( 'td' ).find( '.dbmig-cmd' )[ 0 ];
@@ -557,6 +560,18 @@
 				cols.forEach( function ( c ) {
 					if ( c.key === 'PRI' ) { $( '#dbmig-source-id' ).val( c.name ); }
 				} );
+			}
+
+			// Order-by dropdown lists the same base-table columns (default = ID column).
+			var ob = $( '#dbmig-orderby' );
+			if ( ob.length ) {
+				var curOb = ob.val();
+				var obHtml = '<option value="">' + ( DBMig.i18n.orderDefault || '— default (ID column) —' ) + '</option>';
+				cols.forEach( function ( c ) {
+					obHtml += '<option value="' + c.name + '">' + c.name + '</option>';
+				} );
+				ob.html( obHtml );
+				if ( curOb ) { ob.val( curOb ); }
 			}
 		},
 
@@ -1092,6 +1107,12 @@
 			$.when.apply( $, loads ).then( function () {
 				self.fillIdColumn();
 				$( '#dbmig-source-id' ).val( p.source_id_column );
+				// Row filter (WHERE / ORDER BY / LIMIT / OFFSET).
+				$( '#dbmig-where' ).val( p.where_sql || '' );
+				$( '#dbmig-orderby' ).val( p.order_by || '' );
+				$( '#dbmig-orderdir' ).val( 'DESC' === p.order_dir ? 'DESC' : 'ASC' );
+				$( '#dbmig-limit' ).val( parseInt( p.row_limit, 10 ) > 0 ? p.row_limit : '' );
+				$( '#dbmig-offset' ).val( parseInt( p.row_offset, 10 ) > 0 ? p.row_offset : '' );
 				self.refreshSourceSelects();
 				// loadAcf() triggers rebuildFieldList which restores pendingFixed.
 				self.loadAcf().then( function () {
@@ -1169,6 +1190,11 @@
 				auto_slug: $( '#dbmig-auto-slug' ).is( ':checked' ) ? 1 : 0,
 				source_table: $( '#dbmig-source-table' ).val(),
 				source_id_column: $( '#dbmig-source-id' ).val(),
+				where_sql: $.trim( $( '#dbmig-where' ).val() || '' ),
+				order_by: $( '#dbmig-orderby' ).val() || '',
+				order_dir: 'DESC' === $( '#dbmig-orderdir' ).val() ? 'DESC' : 'ASC',
+				row_limit: parseInt( $( '#dbmig-limit' ).val(), 10 ) || 0,
+				row_offset: parseInt( $( '#dbmig-offset' ).val(), 10 ) || 0,
 				joins: [],
 				fields: [],
 				repeaters: []
@@ -1477,6 +1503,65 @@
 				$text.text( 'Prepare request failed.' );
 				finish();
 			} );
+		},
+
+		/* ---- preview first row (dry run) ---- */
+		previewRow: function () {
+			var self = this;
+			var p = this.gather();
+			if ( ! p.source_table || ! p.source_id_column ) {
+				alert( 'Select a source table and its ID column first.' );
+				return;
+			}
+			var $wrap = $( '#dbmig-preview-wrap' ).show();
+			var $body = $( '#dbmig-preview-body' ).html( '<em>Loading…</em>' );
+			var $btn = $( '#dbmig-preview' ).prop( 'disabled', true );
+			Ajax.post( 'preview', { profile: JSON.stringify( p ) } )
+				.done( function ( r ) {
+					if ( r && r.success ) {
+						$body.html( self.renderPreview( r.data ) );
+					} else {
+						$body.html( '<span class="dbmig-inline-result err">' + ( ( r && r.data && r.data.message ) || 'Preview failed.' ) + '</span>' );
+					}
+				} )
+				.fail( function () { $body.html( '<span class="dbmig-inline-result err">Preview request failed.</span>' ); } )
+				.always( function () { $btn.prop( 'disabled', false ); } );
+		},
+
+		renderPreview: function ( d ) {
+			var esc = function ( v ) {
+				if ( v === null || v === undefined ) { return '<em style="color:#888">NULL</em>'; }
+				return $( '<div>' ).text( String( v ) ).html();
+			};
+			if ( d.empty ) { return '<p>The source query returned no rows.</p>'; }
+			var html = '<p class="description">Migration type: <strong>' + esc( d.type ) + '</strong></p>';
+			html += '<table class="wp-list-table widefat striped" style="max-width:1000px"><thead><tr>' +
+				'<th style="width:26%">WordPress target</th><th style="width:24%">Source</th><th style="width:22%">Raw value</th><th style="width:28%">Will become</th></tr></thead><tbody>';
+			( d.fields || [] ).forEach( function ( f ) {
+				var target = f.target + ( f.acf_name ? ' (' + f.acf_name + ')' : '' );
+				html += '<tr><td><code>' + esc( f.kind ) + '</code> ' + esc( target ) + '</td><td>' + esc( f.source ) +
+					'</td><td>' + esc( f.raw ) + '</td><td><strong>' + esc( f.resolved ) + '</strong></td></tr>';
+			} );
+			if ( ! ( d.fields || [] ).length ) {
+				html += '<tr><td colspan="4"><em>No fields mapped yet.</em></td></tr>';
+			}
+			html += '</tbody></table>';
+			( d.repeaters || [] ).forEach( function ( rep ) {
+				html += '<p style="margin-top:12px"><strong>Repeater: ' + esc( rep.field ) + '</strong> — ' + rep.count + ' row(s) for this record' + ( rep.count > 10 ? ' (showing 10)' : '' ) + '</p>';
+				if ( rep.rows && rep.rows.length ) {
+					var keys = Object.keys( rep.rows[0] );
+					html += '<table class="wp-list-table widefat striped" style="max-width:1000px"><thead><tr>';
+					keys.forEach( function ( k ) { html += '<th>' + esc( k ) + '</th>'; } );
+					html += '</tr></thead><tbody>';
+					rep.rows.forEach( function ( row ) {
+						html += '<tr>';
+						keys.forEach( function ( k ) { html += '<td>' + esc( row[k] ) + '</td>'; } );
+						html += '</tr>';
+					} );
+					html += '</tbody></table>';
+				}
+			} );
+			return html;
 		},
 
 		generateSql: function () {

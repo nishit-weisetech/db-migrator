@@ -161,6 +161,39 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 			<div id="dbmig-joins-list"></div>
 			<button type="button" class="button" id="dbmig-add-join"><?php esc_html_e( '+ Add join', 'db-migrator' ); ?></button>
 		</section>
+
+		<section class="dbmig-rowfilter">
+			<h3 class="dbmig-joins-title"><?php esc_html_e( 'Row filter (which source rows to migrate)', 'db-migrator' ); ?></h3>
+			<p class="description"><?php esc_html_e( 'Optional. Restrict, order and slice the source rows before migrating — handy for testing (e.g. only 10 rows) or migrating in chunks. These apply to the generated SQL, the PHP import, the count and the preview alike.', 'db-migrator' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="dbmig-where"><?php esc_html_e( 'WHERE condition', 'db-migrator' ); ?></label></th>
+					<td>
+						<input type="text" id="dbmig-where" class="dbmig-grow large-text" placeholder="e.g. status = 'published' AND created_at &gt;= '2020-01-01'">
+						<p class="description"><?php esc_html_e( 'A raw boolean expression on the source table columns (no "WHERE" keyword). Leave blank for all rows. Semicolons and SQL comments are stripped.', 'db-migrator' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="dbmig-orderby"><?php esc_html_e( 'Order by', 'db-migrator' ); ?></label></th>
+					<td>
+						<select id="dbmig-orderby" class="dbmig-grow"><option value=""><?php esc_html_e( '— default (ID column) —', 'db-migrator' ); ?></option></select>
+						<select id="dbmig-orderdir">
+							<option value="ASC"><?php esc_html_e( 'ASC', 'db-migrator' ); ?></option>
+							<option value="DESC"><?php esc_html_e( 'DESC', 'db-migrator' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Only affects which rows a LIMIT/OFFSET picks. Defaults to the ID column so slices stay stable across batches.', 'db-migrator' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="dbmig-limit"><?php esc_html_e( 'Limit / Offset', 'db-migrator' ); ?></label></th>
+					<td>
+						<input type="number" id="dbmig-limit" min="0" step="1" style="width:9em" placeholder="<?php esc_attr_e( 'Limit (0 = all)', 'db-migrator' ); ?>">
+						<input type="number" id="dbmig-offset" min="0" step="1" style="width:9em" placeholder="<?php esc_attr_e( 'Offset', 'db-migrator' ); ?>">
+						<p class="description"><?php esc_html_e( 'Limit = max rows to migrate (0 = no limit). Offset = how many rows to skip first. Together they let you migrate a range, e.g. limit 1000 offset 2000.', 'db-migrator' ); ?></p>
+					</td>
+				</tr>
+			</table>
+		</section>
 	</div>
 
 	<!-- Step 3: field mapping -->
@@ -221,7 +254,8 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 			<label class="dbmig-batch"><?php esc_html_e( 'Batch size', 'db-migrator' ); ?>
 				<input type="number" id="dbmig-batch-size" value="50" min="1" max="500" style="width:80px">
 			</label>
-			<button type="button" class="button" id="dbmig-run" disabled><?php esc_html_e( 'Run import (PHP)', 'db-migrator' ); ?></button>
+			<button type="button" class="button" id="dbmig-preview"><?php esc_html_e( '👁 Preview 1st row', 'db-migrator' ); ?></button>
+				<button type="button" class="button" id="dbmig-run" disabled><?php esc_html_e( 'Run import (PHP)', 'db-migrator' ); ?></button>
 			<button type="button" class="button button-primary" id="dbmig-run-sql" disabled><?php esc_html_e( 'Run SQL (fast)', 'db-migrator' ); ?></button>
 			<button type="button" class="button" id="dbmig-generate-sql" disabled><?php esc_html_e( 'Generate SQL file', 'db-migrator' ); ?></button>
 			<span id="dbmig-save-result" class="dbmig-inline-result"></span>
@@ -229,6 +263,12 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 		<p class="description">
 			<?php esc_html_e( '"Run SQL (fast)" executes the generated create-or-update SQL directly (posts, meta, taxonomies, author linking) with a progress bar — no external mysql client needed. "Run import (PHP)" also handles ACF repeaters. "Generate SQL file" saves a .sql to run yourself.', 'db-migrator' ); ?>
 		</p>
+
+		<div id="dbmig-preview-wrap" style="display:none">
+			<h4><?php esc_html_e( 'Preview — first source row', 'db-migrator' ); ?></h4>
+			<p class="description"><?php esc_html_e( 'Dry run: how the first source row resolves into WordPress. Nothing is written.', 'db-migrator' ); ?></p>
+			<div id="dbmig-preview-body"></div>
+		</div>
 
 		<div id="dbmig-sqlrun-wrap" style="display:none">
 			<div class="dbmig-progress"><div class="dbmig-progress-bar" id="dbmig-sqlrun-bar"></div></div>

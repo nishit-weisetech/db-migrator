@@ -17,7 +17,7 @@ class DBMig_Exporter {
 
 	// Bump when the SQL generation logic changes so previously generated files
 	// are treated as stale and a fresh (corrected) file is produced.
-	const GEN_VERSION = 31;
+	const GEN_VERSION = 32;
 
 	public static function dir_path() {
 		return trailingslashit( DBMIG_DIR . self::SUBDIR );
@@ -52,7 +52,7 @@ class DBMig_Exporter {
 	 * excluded so renaming does not force a regenerate.
 	 */
 	public static function profile_hash( $profile ) {
-		$keys = array( 'migration_type', 'post_type', 'taxonomy', 'post_status', 'role', 'partial', 'source_table', 'source_id_column', 'joins', 'fields', 'repeaters' );
+		$keys = array( 'migration_type', 'post_type', 'taxonomy', 'post_status', 'role', 'partial', 'source_table', 'source_id_column', 'where_sql', 'order_by', 'order_dir', 'row_limit', 'row_offset', 'joins', 'fields', 'repeaters' );
 		$sub  = array();
 		foreach ( $keys as $k ) {
 			$sub[ $k ] = isset( $profile[ $k ] ) ? $profile[ $k ] : null;
