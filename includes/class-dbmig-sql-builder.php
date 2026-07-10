@@ -139,9 +139,23 @@ class DBMig_SQL_Builder {
 		// COALESCE(expr, existing) so a NULL source / unmatched LEFT JOIN keeps the
 		// current value instead of nulling a NOT NULL column or wiping good data.
 		// In partial mode post_modified is left alone unless a post field is mapped.
+		// post_modified/_gmt default to NOW() on every write; a mapped "Modified
+		// date" column overrides both (WordPress always stamps NOW() itself, so
+		// mapping it here is the only way to preserve the source's timestamp).
 		if ( ! $partial || ! empty( $fields ) ) {
-			$set = $partial ? array() : array( 'p.`post_modified` = NOW()', 'p.`post_modified_gmt` = NOW()' );
+			$has_mod = isset( $fields['post_modified'] );
+			if ( $has_mod ) {
+				$set = array(
+					"p.`post_modified` = COALESCE({$fields['post_modified']}, p.`post_modified`)",
+					"p.`post_modified_gmt` = COALESCE({$fields['post_modified']}, p.`post_modified_gmt`)",
+				);
+			} else {
+				$set = $partial ? array() : array( 'p.`post_modified` = NOW()', 'p.`post_modified_gmt` = NOW()' );
+			}
 			foreach ( $fields as $col => $expr ) {
+				if ( 'post_modified' === $col ) {
+					continue; // handled above (drives both post_modified and _gmt)
+				}
 				$set[] = "p.`{$col}` = COALESCE({$expr}, p.`{$col}`)";
 			}
 			// Keep the derived MIME type in sync on re-runs (only overwrites when the
@@ -174,8 +188,8 @@ class DBMig_SQL_Builder {
 			'post_name'             => $post_name_expr,
 			'to_ping'               => "''",
 			'pinged'                => "''",
-			'post_modified'         => 'NOW()',
-			'post_modified_gmt'     => 'NOW()',
+			'post_modified'         => $this->expr_or( $fields, 'post_modified', 'NOW()' ),
+			'post_modified_gmt'     => $this->expr_or( $fields, 'post_modified', 'NOW()' ),
 			'post_content_filtered' => "''",
 			'post_parent'           => $this->expr_or( $fields, 'post_parent', '0' ),
 			'guid'                  => $guid_expr,

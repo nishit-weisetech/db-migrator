@@ -1156,6 +1156,7 @@
 				post_excerpt: [ 'excerpt', 'summary', 'intro' ],
 				post_name: [ 'slug', 'permalink' ],
 				post_date: [ 'created', 'created_at', 'date', 'published', 'pubdate' ],
+				post_modified: [ 'modified', 'modified_at', 'updated', 'updated_at', 'changed', 'last_modified' ],
 				user_email: [ 'email', 'user_email', 'mail' ],
 				user_login: [ 'username', 'login', 'user_name' ],
 				display_name: [ 'name', 'full_name', 'display_name' ],

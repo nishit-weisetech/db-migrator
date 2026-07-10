@@ -253,6 +253,23 @@ class DBMig_Importer {
 		// Stamp the legacy link so relations + re-runs work.
 		$this->stamp_legacy( $post_id, $legacy_table, $legacy_id );
 
+		// wp_insert_post()/wp_update_post() always stamp post_modified to "now", so a
+		// mapped "Modified date" column must be written back directly to preserve the
+		// source timestamp. _gmt gets the same value (this plugin does not TZ-convert,
+		// matching how post_date is handled on the SQL path).
+		if ( isset( $postarr['post_modified'] ) && '' !== (string) $postarr['post_modified'] ) {
+			global $wpdb;
+			$wpdb->update(
+				$wpdb->posts,
+				array(
+					'post_modified'     => $postarr['post_modified'],
+					'post_modified_gmt' => $postarr['post_modified'],
+				),
+				array( 'ID' => $post_id )
+			);
+			clean_post_cache( $post_id );
+		}
+
 		// Meta, ACF, taxonomy, relations.
 		foreach ( $this->profile['fields'] as $f ) {
 			$this->apply_field( $post_id, $row, $f );

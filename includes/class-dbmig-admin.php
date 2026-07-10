@@ -135,6 +135,7 @@ class DBMig_Admin {
 			'post_excerpt'  => 'Excerpt (post_excerpt)',
 			'post_name'     => 'Slug (post_name)',
 			'post_date'     => 'Date (post_date)',
+			'post_modified' => 'Modified date (post_modified)',
 			'post_status'   => 'Status (post_status)',
 			'post_author'   => 'Author ID (post_author)',
 			'menu_order'    => 'Menu order (menu_order)',
@@ -197,6 +198,7 @@ class DBMig_Admin {
 			'post_content'   => 'Description (post_content)',
 			'post_excerpt'   => 'Caption (post_excerpt)',
 			'post_date'      => 'Date (post_date)',
+			'post_modified'  => 'Modified date (post_modified)',
 			'post_author'    => 'Author ID (post_author)',
 			'post_parent'    => 'Attached to — post ID (post_parent)',
 		);
