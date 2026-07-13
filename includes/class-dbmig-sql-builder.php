@@ -572,7 +572,12 @@ class DBMig_SQL_Builder {
 			if ( 'post_author' === $f['target'] && ! empty( $f['rel_table'] ) ) {
 				continue;
 			}
-			$map[ $f['target'] ] = $this->field_expr( $f, $base );
+			$expr = $this->field_expr( $f, $base );
+			// Datetime columns: neutralise zero-dates so strict mode accepts them.
+			if ( in_array( $f['target'], array( 'post_date', 'post_modified' ), true ) ) {
+				$expr = $this->nz_date( $expr );
+			}
+			$map[ $f['target'] ] = $expr;
 		}
 		return $map;
 	}
@@ -611,7 +616,11 @@ class DBMig_SQL_Builder {
 				continue;
 			}
 			if ( 'user_field' === $f['target_kind'] && in_array( $f['target'], $this->user_columns, true ) ) {
-				$cols_map[ $f['target'] ] = $this->field_expr( $f, $base );
+				$expr = $this->field_expr( $f, $base );
+				if ( 'user_registered' === $f['target'] ) {
+					$expr = $this->nz_date( $expr ); // neutralise zero-dates (strict mode)
+				}
+				$cols_map[ $f['target'] ] = $expr;
 			} elseif ( 'user_field' === $f['target_kind'] ) {
 				// first_name / last_name / nickname / description live in usermeta.
 				$meta_map[] = array( 'meta_key' => $f['target'], 'expr' => $this->field_expr( $f, $base ), 'kind' => 'user_meta' );
@@ -931,7 +940,11 @@ class DBMig_SQL_Builder {
 				if ( 'comment_parent' === $f['target'] && 'resolve_comment' === ( $f['transform'] ?? '' ) ) {
 					continue;
 				}
-				$fields[ $f['target'] ] = $this->field_expr( $f, $base );
+				$expr = $this->field_expr( $f, $base );
+				if ( 'comment_date' === $f['target'] ) {
+					$expr = $this->nz_date( $expr ); // neutralise zero-dates (strict mode)
+				}
+				$fields[ $f['target'] ] = $expr;
 			} elseif ( 'comment_meta' === $f['target_kind'] ) {
 				$meta_map[] = array( 'meta_key' => $f['target'], 'expr' => $this->field_expr( $f, $base ), 'field_key' => '' );
 			} elseif ( 'acf' === $f['target_kind'] ) {
@@ -1585,6 +1598,21 @@ class DBMig_SQL_Builder {
 	 */
 	private function expr_or( $map, $key, $default ) {
 		return array_key_exists( $key, $map ) ? "COALESCE({$map[ $key ]}, {$default})" : $default;
+	}
+
+	/**
+	 * Guard a mapped datetime expression against "zero" dates.
+	 *
+	 * '0000-00-00 00:00:00' (and '0000-00-00' / '') are rejected by MySQL strict
+	 * mode (NO_ZERO_DATE) yet are NOT NULL, so a bare COALESCE(col, NOW()) does not
+	 * replace them and the import fails with ERROR 1292. Turning them into NULL here
+	 * lets the caller's existing COALESCE fallback (NOW() on insert, the current
+	 * value on update) take over. The value is compared as CHAR so the guard itself
+	 * never coerces anything into a rejected datetime.
+	 */
+	private function nz_date( $expr ) {
+		$c = "CAST({$expr} AS CHAR)";
+		return "NULLIF(NULLIF(NULLIF({$c}, '0000-00-00 00:00:00'), '0000-00-00'), '')";
 	}
 
 	/**
