@@ -136,6 +136,16 @@
 			this.initSearch();
 			this.loadAllAcf();
 			this.loadTables().then( this.hydrate.bind( this ) );
+
+			// Safety net: never leave the "Loading saved migration…" overlay stuck if
+			// an AJAX call fails or hangs. hydrate() hides it as soon as the form is
+			// populated; this just guarantees it disappears either way.
+			var self = this;
+			setTimeout( function () { self.hideEditorLoading(); }, 8000 );
+		},
+
+		hideEditorLoading: function () {
+			$( '#dbmig-editor-loading' ).addClass( 'is-hidden' );
 		},
 
 		/**
@@ -1051,6 +1061,7 @@
 			if ( ! p || ! p.source_table ) {
 				this.onTypeChange();   // sets visibility + loads acf + builds field list
 				$( '#dbmig-run, #dbmig-run-sql, #dbmig-generate-sql' ).prop( 'disabled', true );
+				this.hideEditorLoading();
 				return;
 			}
 
@@ -1135,8 +1146,12 @@
 						} );
 						self.rebuildFieldList();
 						( p.repeaters || [] ).forEach( function ( rep ) { self.addRepeaterRow( rep ); } );
+						self.hideEditorLoading(); // form is fully populated now
 					} );
 				} );
+			} ).fail( function () {
+				// Columns failed to load — reveal whatever populated rather than hang.
+				self.hideEditorLoading();
 			} );
 
 			$( '#dbmig-run, #dbmig-run-sql, #dbmig-generate-sql' ).prop( 'disabled', false );

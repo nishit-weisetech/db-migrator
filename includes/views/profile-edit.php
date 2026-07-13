@@ -19,6 +19,16 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 	data-profile="<?php echo esc_attr( $profile_json ); ?>"
 	data-postfields="<?php echo esc_attr( $post_field_json ); ?>">
 
+	<?php if ( ! $is_new ) : ?>
+		<?php // Covers the editor until the saved migration is loaded + populated via AJAX, so the user never sees a flash of the empty/default form. Hidden by admin.js when hydrate finishes (with a safety timeout). ?>
+		<div id="dbmig-editor-loading" class="dbmig-editor-loading" role="status" aria-live="polite">
+			<div class="dbmig-editor-loading-inner">
+				<span class="dbmig-spinner" aria-hidden="true"></span>
+				<span class="dbmig-editor-loading-text"><?php esc_html_e( 'Loading saved migration…', 'db-migrator' ); ?></span>
+			</div>
+		</div>
+	<?php endif; ?>
+
 	<h1 class="wp-heading-inline"><?php echo $is_new ? esc_html__( 'New migration', 'db-migrator' ) : esc_html__( 'Edit migration', 'db-migrator' ); ?></h1>
 	<a href="<?php echo esc_url( $list_url ); ?>" class="page-title-action"><?php esc_html_e( 'Back to list', 'db-migrator' ); ?></a>
 	<a href="<?php echo esc_url( admin_url( 'admin.php?page=' . DBMig_Admin::GUIDE_SLUG ) ); ?>" class="page-title-action" target="_blank">📖 <?php esc_html_e( 'Guide', 'db-migrator' ); ?></a>
