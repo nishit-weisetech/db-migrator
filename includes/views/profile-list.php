@@ -25,6 +25,9 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 		<a href="<?php echo esc_url( $export_url ); ?>" class="page-title-action" id="dbmig-export-btn" title="<?php esc_attr_e( 'Exports the checked migrations, or all of them if none are checked.', 'db-migrator' ); ?>"><?php esc_html_e( '⬇ Export migrations', 'db-migrator' ); ?></a>
 	<?php endif; ?>
 	<button type="button" class="page-title-action" id="dbmig-import-btn"><?php esc_html_e( '⬆ Import migrations', 'db-migrator' ); ?></button>
+	<?php if ( ! empty( $profiles ) ) : ?>
+		<button type="button" class="page-title-action" id="dbmig-delete-selected" disabled title="<?php esc_attr_e( 'Deletes the checked migrations.', 'db-migrator' ); ?>"><?php esc_html_e( '🗑 Delete selected', 'db-migrator' ); ?></button>
+	<?php endif; ?>
 	<input type="file" id="dbmig-import-file" accept="application/json,.json" style="display:none">
 	<span id="dbmig-import-result" class="dbmig-inline-result"></span>
 	<hr class="wp-header-end">

@@ -134,6 +134,29 @@ class DBMig_Profiles {
 	}
 
 	/**
+	 * Delete several profiles in one option write (bulk delete).
+	 *
+	 * @param string[] $ids Profile ids to remove.
+	 * @return int Number of profiles actually removed.
+	 */
+	public static function delete_many( $ids ) {
+		$ids = array_filter( array_map( 'strval', (array) $ids ), 'strlen' );
+		if ( empty( $ids ) ) {
+			return 0;
+		}
+		$profiles = self::all();
+		$before   = count( $profiles );
+		$profiles = array_values( array_filter(
+			$profiles,
+			function ( $p ) use ( $ids ) {
+				return ! in_array( $p['id'], $ids, true );
+			}
+		) );
+		update_option( self::OPTION_KEY, $profiles );
+		return $before - count( $profiles );
+	}
+
+	/**
 	 * Normalise / sanitise a profile coming from the admin form ($_POST decoded).
 	 */
 	public static function sanitize( $raw ) {

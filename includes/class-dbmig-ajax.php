@@ -19,6 +19,7 @@ class DBMig_Ajax {
 			'sample_rows',
 			'save_profile',
 			'delete_profile',
+			'delete_profiles',
 			'count',
 			'preview',
 			'run_batch',
@@ -291,6 +292,24 @@ class DBMig_Ajax {
 		$id = sanitize_text_field( wp_unslash( $_POST['id'] ?? '' ) );
 		DBMig_Profiles::delete( $id );
 		wp_send_json_success( array( 'message' => __( 'Deleted.', 'db-migrator' ) ) );
+	}
+
+	/**
+	 * Bulk-delete the selected migrations (from the list page checkboxes).
+	 */
+	public function delete_profiles() {
+		$this->guard();
+		$raw = isset( $_POST['ids'] ) ? wp_unslash( $_POST['ids'] ) : array();
+		$ids = array_filter( array_map( 'sanitize_text_field', (array) $raw ), 'strlen' );
+		if ( empty( $ids ) ) {
+			wp_send_json_error( array( 'message' => __( 'No migrations selected.', 'db-migrator' ) ) );
+		}
+		$deleted = DBMig_Profiles::delete_many( $ids );
+		wp_send_json_success( array(
+			'deleted' => $deleted,
+			/* translators: %d: number of migrations deleted. */
+			'message' => sprintf( _n( '%d migration deleted.', '%d migrations deleted.', $deleted, 'db-migrator' ), $deleted ),
+		) );
 	}
 
 	public function count() {

@@ -1665,18 +1665,57 @@
 			return;
 		}
 
+		var $delBtn = $( '#dbmig-delete-selected' );
+		function checkedIds() {
+			return $( '.dbmig-export-check:checked' ).map( function () { return this.value; } ).get();
+		}
+		// "Delete selected" is only enabled when at least one row is checked.
+		function syncDeleteBtn() {
+			if ( $delBtn.length ) { $delBtn.prop( 'disabled', checkedIds().length === 0 ); }
+		}
+
 		// Export: send only the checked migrations (all if none checked).
 		$( '#dbmig-check-all' ).on( 'change', function () {
 			$( '.dbmig-export-check' ).prop( 'checked', this.checked );
+			syncDeleteBtn();
 		} );
+		$( document ).on( 'change', '.dbmig-export-check', syncDeleteBtn );
+		syncDeleteBtn();
+
 		$( '#dbmig-export-btn' ).on( 'click', function ( e ) {
-			var ids = $( '.dbmig-export-check:checked' ).map( function () { return this.value; } ).get();
+			var ids = checkedIds();
 			var href = this.href.split( '&ids=' )[0]; // base url (action + nonce)
 			if ( ids.length ) {
 				href += '&ids=' + encodeURIComponent( ids.join( ',' ) );
 			}
 			e.preventDefault();
 			window.location = href;
+		} );
+
+		// Bulk delete: remove every checked migration in one request.
+		$delBtn.on( 'click', function () {
+			var ids = checkedIds();
+			if ( ! ids.length ) { return; }
+			if ( ! window.confirm(
+				'Delete ' + ids.length + ' migration' + ( ids.length > 1 ? 's' : '' ) +
+				'? This cannot be undone.'
+			) ) { return; }
+			var $res = $( '#dbmig-import-result' ).text( 'Deleting…' );
+			$delBtn.prop( 'disabled', true );
+			Ajax.post( 'delete_profiles', { ids: ids } )
+				.done( function ( r ) {
+					if ( r && r.success ) {
+						$res.text( r.data.message );
+						setTimeout( function () { location.reload(); }, 600 );
+					} else {
+						$res.text( ( r && r.data && r.data.message ) ? r.data.message : 'Delete failed.' );
+						syncDeleteBtn();
+					}
+				} )
+				.fail( function () {
+					$res.text( 'Delete request failed.' );
+					syncDeleteBtn();
+				} );
 		} );
 
 		$btn.on( 'click', function () { $( '#dbmig-import-file' ).click(); } );
