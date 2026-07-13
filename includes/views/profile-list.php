@@ -44,7 +44,7 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 				<td class="check-column"><input type="checkbox" id="dbmig-check-all" title="<?php esc_attr_e( 'Select all', 'db-migrator' ); ?>"></td>
 				<th><?php esc_html_e( 'Name', 'db-migrator' ); ?></th>
 				<th><?php esc_html_e( 'Source table', 'db-migrator' ); ?></th>
-				<th><?php esc_html_e( 'Target post type', 'db-migrator' ); ?></th>
+				<th><?php esc_html_e( 'Target', 'db-migrator' ); ?></th>
 				<th><?php esc_html_e( 'Mappings', 'db-migrator' ); ?></th>
 				<th><?php esc_html_e( 'Actions', 'db-migrator' ); ?></th>
 			</tr>
@@ -61,12 +61,26 @@ $settings_url = admin_url( 'admin.php?page=' . DBMig_Admin::SETTINGS_SLUG );
 						'dbmig_delete_profile'
 					);
 					$field_count = count( $p['fields'] ) + count( $p['repeaters'] );
+
+					// Resolve the migration target for display. post_type defaults to
+					// 'post' for every type, so a taxonomy/user/comment migration must
+					// show its real target (the taxonomy, "users", "comments") instead.
+					$mig_type = $p['migration_type'] ?? 'post';
+					if ( 'term' === $mig_type ) {
+						$target = ! empty( $p['taxonomy'] ) ? $p['taxonomy'] . ' (taxonomy)' : __( 'taxonomy', 'db-migrator' );
+					} elseif ( 'user' === $mig_type ) {
+						$target = __( 'users', 'db-migrator' );
+					} elseif ( 'comment' === $mig_type ) {
+						$target = __( 'comments', 'db-migrator' );
+					} else {
+						$target = $p['post_type']; // post / attachment
+					}
 					?>
 					<tr>
 						<th scope="row" class="check-column"><input type="checkbox" class="dbmig-export-check" value="<?php echo esc_attr( $p['id'] ); ?>"></th>
 						<td><strong><a href="<?php echo esc_url( $edit_url ); ?>"><?php echo esc_html( $p['name'] ? $p['name'] : $p['id'] ); ?></a></strong></td>
 						<td><code><?php echo esc_html( $p['source_table'] ); ?></code></td>
-						<td><?php echo esc_html( $p['post_type'] ); ?></td>
+						<td><?php echo esc_html( $target ); ?></td>
 						<td><?php echo esc_html( $field_count ); ?></td>
 						<td>
 							<a href="<?php echo esc_url( $edit_url ); ?>" class="button button-small"><?php esc_html_e( 'Edit / Run', 'db-migrator' ); ?></a>
