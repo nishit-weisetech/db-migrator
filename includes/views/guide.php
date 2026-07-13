@@ -194,6 +194,28 @@ Join 2:  LEFT JOIN  category          ON  news_categories.cat_id = category.id</
 				</ul>
 			</li>
 		</ul>
+		<h3 style="margin-top:1.2em">Worked example — a repeater across several tables</h3>
+		<p>Each <strong>team</strong> should get a repeater listing its <strong>squad players</strong>, but the link runs through two junction tables:</p>
+		<pre class="dbmig-example">wp_team_team        (the migrated post)
+  → wp_team_squad    (team_id, player_id)      -- who is in the squad
+  → wp_person_player (id, person_id)           -- the player record
+  → wp_person_person (id, shortname, …)        -- the actual person = repeater rows</pre>
+		<p>A repeater pointed <em>directly</em> at the child would wrongly match <code>wp_person_person.id = wp_team_team.id</code> and produce a single, wrong row. Declare the in-between tables as <strong>Link via</strong> joins so the chain is walked instead:</p>
+		<table class="dbmig-guide-table">
+			<tr><th>Child table</th><td><code>wp_person_person</code></td></tr>
+			<tr><th>Child FK</th><td><code>id</code></td></tr>
+			<tr><th>matches</th><td><code>wp_person_player.person_id</code> — the column on the <em>last</em> link table that the child equals</td></tr>
+			<tr><th>Link via 1</th><td><code>wp_team_squad</code> &nbsp;ON&nbsp; <code>wp_team_squad.team_id = wp_team_team.id</code></td></tr>
+			<tr><th>Link via 2</th><td><code>wp_person_player</code> &nbsp;ON&nbsp; <code>wp_person_player.id = wp_team_squad.player_id</code></td></tr>
+			<tr><th>Sub-field</th><td><code>some_text ← shortname</code> — resolves to the <em>person's</em> shortname (sub-fields read from the child table)</td></tr>
+		</table>
+		<p>That produces the correct chain, and <strong>every</strong> squad member becomes a repeater row:</p>
+		<pre class="dbmig-example">FROM wp_team_team
+JOIN wp_team_squad    ON wp_team_squad.team_id = wp_team_team.id
+JOIN wp_person_player ON wp_person_player.id   = wp_team_squad.player_id
+JOIN wp_person_person ON wp_person_person.id   = wp_person_player.person_id</pre>
+		<p class="dbmig-warn"><strong>Key point:</strong> add the intermediate tables under the <em>repeater's own</em> “Link via” (Step 4), <strong>not</strong> the profile-level “Related tables (JOINs)” in Step 2 — the profile joins don't feed repeaters. Add the links in path order (team → squad → player); any depth works.</p>
+
 		<p class="dbmig-note">ACF must be active for these. If it isn't, ACF targets fall back to plain post/user meta.</p>
 	</div>
 
