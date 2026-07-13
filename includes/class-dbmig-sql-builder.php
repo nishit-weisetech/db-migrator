@@ -247,8 +247,21 @@ class DBMig_SQL_Builder {
 		/* ---- 6. ACF repeaters (child tables -> indexed meta) ---- */
 		$lines = array_merge( $lines, $this->build_repeaters( $base, $ltn ) );
 
-		$lines[] = '';
-		$lines[] = '-- Note: multi-value ACF relationships sourced from a single column still run via "Run import".';
+		// Only warn about the single-column relationship limitation when the profile
+		// actually has such a field. Relationships sourced from a JOIN (e.g.
+		// wp_posts.ID) already aggregate every matched id above, so no note is needed.
+		$single_col_relations = array();
+		foreach ( $this->profile['fields'] as $f ) {
+			if ( 'acf_relation' === ( $f['target_kind'] ?? '' ) && ! empty( $f['source'] ) && false === strpos( $f['source'], '.' ) ) {
+				$single_col_relations[] = $f['source'];
+			}
+		}
+		if ( $single_col_relations ) {
+			$lines[] = '';
+			$lines[] = '-- Note: ACF relationship(s) sourced from a single column (' . implode( ', ', array_unique( $single_col_relations ) ) . ') store';
+			$lines[] = '-- one resolved id here. If that column holds several comma-separated ids, run';
+			$lines[] = '-- "Run import" to expand every value (the fast SQL path writes only one).';
+		}
 		$lines = array_merge( $lines, $this->footer() );
 
 		return implode( "\n", $lines );

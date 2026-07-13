@@ -2,7 +2,7 @@
 /**
  * Plugin Name: DB Migrator
  * Description: Migrate data from an external (legacy) MySQL database into WordPress posts, post meta, taxonomies, users and ACF fields with a visual field-mapping panel. Maintains a legacy_id / legacy_table_name relation on wp_posts so cross-table relations and re-runs stay consistent.
- * Version: 0.0.5
+ * Version: 0.0.6
  * Author: Weise Technologies
  * Requires PHP: 7.4
  * Text Domain: db-migrator
