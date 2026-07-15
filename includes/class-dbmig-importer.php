@@ -137,18 +137,34 @@ class DBMig_Importer {
 				$v                = $this->resolve_source_value( $row, $f, true );
 				$item['resolved'] = ( null === $v || '' === $v ) ? '(none)' : ( 'term(s): ' . $v );
 			} elseif ( 'acf_relation' === $kind ) {
-				$raw   = $this->resolve_source_value( $row, $f, true );
 				$match = ! empty( $f['rel_match'] ) ? $f['rel_match'] : 'legacy';
-				$ids   = array();
-				if ( null !== $raw && '' !== $raw && ! ( 'legacy' === $match && empty( $f['rel_table'] ) ) ) {
-					foreach ( array_filter( array_map( 'trim', explode( ',', (string) $raw ) ), 'strlen' ) as $v ) {
+				// A relationship sourced from a JOIN column (e.g. wp_posts.ID) is
+				// one-to-many: the single preview row holds just one of the matches,
+				// so query every matched value for this source record — mirroring what
+				// the migration aggregates. A plain / CSV column keeps the comma-split
+				// of the single row's value.
+				if ( ! $static && false !== strpos( (string) ( $f['source'] ?? '' ), '.' ) ) {
+					$rawvals = $this->preview_relation_values( $row, $f );
+				} else {
+					$raw     = $this->resolve_source_value( $row, $f, true );
+					$rawvals = ( null !== $raw && '' !== $raw )
+						? array_filter( array_map( 'trim', explode( ',', (string) $raw ) ), 'strlen' )
+						: array();
+				}
+				if ( ! empty( $rawvals ) ) {
+					$item['raw'] = implode( ', ', $rawvals );
+				}
+				$ids = array();
+				if ( ! ( 'legacy' === $match && empty( $f['rel_table'] ) ) ) {
+					foreach ( $rawvals as $v ) {
 						$wid = $this->resolve_related_post( $v, $f, $match );
 						if ( $wid ) {
 							$ids[] = $wid;
 						}
 					}
 				}
-				$item['resolved'] = empty( $ids ) ? '(no match yet)' : ( 'WP post id(s): ' . implode( ', ', $ids ) );
+				$ids              = array_values( array_unique( $ids ) );
+				$item['resolved'] = empty( $ids ) ? '(no match yet)' : ( 'WP post id(s): ' . implode( ', ', $ids ) . ' (' . count( $ids ) . ')' );
 			} elseif ( 'media' === $kind ) {
 				$item['resolved'] = ( '' === (string) $item['raw'] ) ? '(none)' : ( 'attachment from "' . basename( (string) $item['raw'] ) . '" → ' . ( $f['attach_as'] ?: 'attachment' ) );
 			} else {
@@ -176,6 +192,40 @@ class DBMig_Importer {
 			'fields'    => $fields,
 			'repeaters' => $repeaters,
 		);
+	}
+
+	/**
+	 * All distinct source values for a join-sourced relationship field, for the
+	 * first source record (so a one-to-many relationship previews every match, not
+	 * just the one captured by the single flattened preview row). Walks the same
+	 * joins the migration uses and filters to that record's id.
+	 *
+	 * @return string[]
+	 */
+	private function preview_relation_values( $row, $f ) {
+		$id_col = $this->profile['source_id_column'];
+		if ( ! array_key_exists( $id_col, $row ) || null === $row[ $id_col ] || '' === $row[ $id_col ] ) {
+			return array();
+		}
+		$first_id = $row[ $id_col ];
+		$base     = $this->ext->safe_identifier( $this->table_alias( $this->profile['source_table'] ) );
+		$expr     = $this->qualify( $f['source'] );
+		$from     = $this->build_from();
+		$idv      = is_numeric( $first_id ) ? $first_id : "'" . esc_sql( $first_id ) . "'";
+		$sql      = "SELECT DISTINCT {$expr} AS dbmig_v {$from} WHERE `{$base}`.`" . esc_sql( $id_col ) . "` = {$idv} AND {$expr} IS NOT NULL";
+
+		$rows = $this->ext->query( $sql );
+		if ( is_wp_error( $rows ) || ! is_array( $rows ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $rows as $r ) {
+			$v = isset( $r['dbmig_v'] ) ? trim( (string) $r['dbmig_v'] ) : '';
+			if ( '' !== $v ) {
+				$out[] = $v;
+			}
+		}
+		return array_values( array_unique( $out ) );
 	}
 
 	/**
